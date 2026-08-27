@@ -5,10 +5,11 @@ Guidance, architectural standards, and critical invariants for agents working in
 ## System Architecture
 
 - **Deployment Target (Unified Railway Project):**
-  - **Frontend:** Next.js (App Router, TypeScript, Tailwind CSS, shadcn/ui) deployed to **Railway** as a persistent Node service.
+  - **Frontend:** Next.js (App Router, TypeScript, Tailwind CSS, shadcn/ui, Better Auth) deployed to **Railway** as a persistent Node service.
   - **Backend:** FastAPI (Python 3.11+, SQLAlchemy, Alembic, Pydantic) deployed to **Railway** as a persistent containerized service.
   - **Database:** **Neon (PostgreSQL)** (serverless with connection pooling and branching).
   - **File Storage:** **Cloudflare R2** (S3-compatible via `boto3`, $0 egress fees) for product imagery and device attachments.
+  - **Auth Integration:** **Better Auth** runs in Next.js (`/api/auth/[...all]`) managing user and session tables in Neon PostgreSQL. FastAPI authenticates requests by validating session tokens / Bearer tokens against the shared PostgreSQL database and resolving the user's role and `business_id`.
   - **Internal Network:** Server-side Next.js calls reach FastAPI via Railway private mesh; client browser requests call FastAPI over public HTTPS.
 
 ## Local Development & Testing (Priority Workflow)

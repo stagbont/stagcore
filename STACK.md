@@ -15,7 +15,7 @@
 | ORM | SQLAlchemy | |
 | Migrations | Alembic | |
 | Validation | Pydantic v2 | |
-| Auth | JWT / session-based | Issued by FastAPI, verified on every request; `business_id` scoping enforced server-side per PRD.md |
+| Auth | **Better Auth** (TypeScript / Next.js) | Manages User, Session, Account tables in Neon PostgreSQL; FastAPI validates sessions/Bearer tokens against shared DB; `business_id` scoping enforced on every API route |
 | File storage | **Cloudflare R2** (S3-compatible) | Product images, device photos (via `boto3`, $0 egress) |
 | Deployment packaging | Docker / Nixpacks | Unified Railway project with independent service triggers |
 
@@ -27,6 +27,10 @@
 - **Database (Neon PostgreSQL):**
   - **Runtime API Traffic:** Uses the pooled connection string (`DATABASE_URL`, hostname with `-pooler`).
   - **Alembic Migrations:** Uses the unpooled/direct connection string (`DATABASE_URL_UNPOOLED`) to avoid PgBouncer session state conflicts.
+- **Auth Architecture (Better Auth):**
+  - Next.js handles user signup, login, session cookies, and credentials via Better Auth (`/api/auth/[...all]`).
+  - Auth tables (`user`, `session`, `account`, `verification`) reside in the shared Neon PostgreSQL database.
+  - FastAPI authenticates incoming requests by verifying the session token / Bearer token against the PostgreSQL `session` table or shared secret, then resolving the user's role and `business_id` in `BusinessUser`.
 - **Object Storage (Cloudflare R2):** S3-compatible bucket for receipt PDFs, product photos, and device attachments with zero egress fees.
 
 **Explicitly deferred past v1:** Redis, offline-first sync/local IndexedDB, native mobile apps, microservices, AI/forecasting services.
@@ -112,7 +116,7 @@ npm run dev
 
 Mirrors PRD.md's milestones — literal implementation order, one vertical slice at a time. Implement and verify each phase locally before starting the next:
 
-1. **Phase 1 — Foundation.** Auth (`/auth/register`, `/auth/login`, `/auth/me`), Business creation, User/role system (OWNER/MANAGER/CASHIER/INVENTORY_CLERK), `BusinessFeature` table + admin-panel toggle UI. Verify: can register, log in, see an empty dashboard, and flip a feature flag as Platform Admin.
+1. **Phase 1 — Foundation.** Auth with Better Auth (signup, login, session validation), Business creation, User/role system (OWNER/MANAGER/CASHIER/INVENTORY_CLERK), `BusinessFeature` table + admin-panel toggle UI. Verify: can register, log in, see an empty dashboard, and flip a feature flag as Platform Admin.
 2. **Phase 2 — Core entities.** Products (non-serialized), Devices (serialized), Categories, Suppliers, Customers. Verify: CRUD works and every row is correctly scoped to `business_id`.
 3. **Phase 3 — Inventory engine.** `InventoryService` (receive_stock, sell_stock, adjust_stock, return_stock, get_current_stock), `InventoryMovement` ledger, Locations table. Verify: stock is never writable directly — only through the service, and every change produces a ledger row.
 4. **Phase 4 — Purchasing.** `Purchase`/`PurchaseItem`, goods receiving for both products and devices (device receiving creates individual `Device` rows with serial/IMEI). Verify: receiving a purchase increases stock via a movement, not a direct field edit.

@@ -48,6 +48,7 @@ Target customer: an independent gadget shop owner currently using Excel, WhatsAp
 ## Functional Requirements
 
 ### Auth & Tenancy
+- Authentication is handled via **Better Auth** (Next.js `/api/auth/[...all]`) storing user, session, and account records in Neon PostgreSQL.
 - Register creates: `User` + `Business` + `BusinessUser` (role = owner).
 - Every business-owned table carries `business_id`; every query is scoped to it. Complete tenant isolation — no cross-business queries, ever.
 - Roles: OWNER, MANAGER, CASHIER, INVENTORY_CLERK. Permission matrix:
@@ -133,7 +134,7 @@ Product/Device ── Purchase
 
 ## Tech Stack
 
-See STACK.md. Decided already: Next.js + TypeScript + Tailwind + shadcn/ui (frontend), FastAPI + Python (backend), Neon PostgreSQL + SQLAlchemy + Alembic (DB/migrations), Cloudflare R2 (S3 storage), Railway (unified deployment platform), JWT/session auth, Pydantic validation. Redis, offline sync, and mobile apps are explicitly deferred past v1. Local development is the primary priority during build.
+See STACK.md. Decided already: Next.js + TypeScript + Tailwind + shadcn/ui (frontend), FastAPI + Python (backend), Neon PostgreSQL + SQLAlchemy + Alembic (DB/migrations), Better Auth (authentication & sessions), Cloudflare R2 (S3 storage), Railway (unified deployment platform), Pydantic validation. Redis, offline sync, and mobile apps are explicitly deferred past v1. Local development is the primary priority during build.
 
 ## Non-Functional Requirements
 

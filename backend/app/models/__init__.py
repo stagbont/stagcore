@@ -1,6 +1,28 @@
 from app.core.database import Base
 from app.models.auth import Account, Session, User, Verification
 from app.models.business import Business, BusinessUser, UserRole
+from app.models.category import Category
+from app.models.customer import Customer
+from app.models.device import Device, DeviceStatus
 from app.models.feature import BusinessFeature
+from app.models.product import Product, ProductStatus
+from app.models.supplier import Supplier
 
-__all__ = ["Base", "Business", "BusinessUser", "UserRole", "BusinessFeature", "User", "Session", "Account", "Verification"]
+__all__ = [
+    "Base",
+    "Business",
+    "BusinessUser",
+    "UserRole",
+    "BusinessFeature",
+    "User",
+    "Session",
+    "Account",
+    "Verification",
+    "Category",
+    "Supplier",
+    "Customer",
+    "Product",
+    "ProductStatus",
+    "Device",
+    "DeviceStatus",
+]

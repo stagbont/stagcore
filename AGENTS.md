@@ -38,7 +38,18 @@ Local execution is completely decoupled from cloud hosting. Develop and verify l
   - Command: `alembic upgrade head` from `backend/`.
 - **Testing & Verification:**
   - Run backend unit/integration tests: `pytest` from `backend/`.
-  - Frontend typecheck/lint: `npm run lint` and `npm run build` from `frontend/`.
+## Error Handling, Corrections & Lessons Protocol
+
+Whenever you encounter a bug, failed approach, regression, or user correction during development:
+
+1. **Record What Went Wrong:** State the error message, symptom, or failing behavior clearly.
+2. **Record Root Cause:** Identify why it happened (e.g. schema mismatch, unhandled null state, PgBouncer pooling incompatibility, missing tenant scope).
+3. **Record the Fix:** Document the exact solution applied to resolve it.
+4. **Record Prevention Strategy:** Note guidelines or tests required to prevent recurrence.
+5. **Maintain `docs/LESSONS.md`:**
+   - If the lesson, pattern, or gotcha is reusable across the codebase, add an entry to `docs/LESSONS.md`.
+6. **Pre-Implementation Check:**
+   - Always consult `docs/LESSONS.md` before implementing similar code, migrations, API routes, or UI components.
 
 ## Core Domain Invariants & Rules
 

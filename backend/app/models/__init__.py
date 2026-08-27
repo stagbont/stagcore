@@ -9,8 +9,10 @@ from app.models.inventory import InventoryMovement, MovementType
 from app.models.location import Location
 from app.models.product import Product, ProductStatus
 from app.models.purchase import PaymentStatus, Purchase, PurchaseItem, PurchaseStatus
+from app.models.repair import Repair, RepairStatus, REPAIR_ALLOWED_TRANSITIONS
 from app.models.sale import PaymentMethod, Sale, SaleItem, SaleStatus
 from app.models.supplier import Supplier
+from app.models.warranty import Warranty, WarrantyClaim, WarrantyClaimResolution, WarrantyClaimStatus, WarrantyStatus
 
 __all__ = [
     "Base",
@@ -40,4 +42,12 @@ __all__ = [
     "SaleItem",
     "SaleStatus",
     "PaymentMethod",
+    "Warranty",
+    "WarrantyStatus",
+    "WarrantyClaim",
+    "WarrantyClaimStatus",
+    "WarrantyClaimResolution",
+    "Repair",
+    "RepairStatus",
+    "REPAIR_ALLOWED_TRANSITIONS",
 ]

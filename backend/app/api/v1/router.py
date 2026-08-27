@@ -6,15 +6,18 @@ from app.api.v1 import (
     categories,
     customers,
     dashboard,
+    device_history,
     devices,
     features,
     inventory,
     locations,
     products,
     purchases,
+    repairs,
     reports,
     sales,
     suppliers,
+    warranties,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -30,6 +33,9 @@ api_router.include_router(locations.router, prefix="/locations", tags=["location
 api_router.include_router(inventory.router, prefix="/inventory", tags=["inventory"])
 api_router.include_router(purchases.router, prefix="/purchases", tags=["purchases"])
 api_router.include_router(sales.router, prefix="/sales", tags=["sales"])
+api_router.include_router(warranties.router, tags=["warranties"])
+api_router.include_router(repairs.router, prefix="/repairs", tags=["repairs"])
+api_router.include_router(device_history.router, tags=["device_history"])
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 api_router.include_router(reports.router, prefix="/reports", tags=["reports"])
 

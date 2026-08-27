@@ -158,6 +158,20 @@ class SalesService:
                     notes=f"Sale {sale.id}",
                     created_by=actor_id,
                 )
+                # Auto-create warranty for device
+                from app.services.warranty import WarrantyService
+
+                await WarrantyService.create_warranty_for_sale_item(
+                    db,
+                    business_id,
+                    it.device_id,
+                    sale.id,
+                    it.id,
+                    sale.customer_id,
+                    sale.sale_date,
+                    it.warranty_months_override,
+                    actor_id,
+                )
 
         sale.status = SaleStatus.COMPLETED.value
         sale.updated_at = datetime.now(timezone.utc)
@@ -210,6 +224,10 @@ class SalesService:
                         notes=f"Cancel sale {sale.id}",
                         created_by=actor_id,
                     )
+            # Void linked warranties
+            from app.services.warranty import WarrantyService
+
+            await WarrantyService.void_warranties_for_sale(db, business_id, sale.id)
             sale.status = SaleStatus.CANCELLED.value
             sale.updated_at = datetime.now(timezone.utc)
             await db.flush()

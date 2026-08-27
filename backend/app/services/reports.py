@@ -166,6 +166,30 @@ class ReportService:
                     )
                 )
 
+        # Warranty & Repairs counts
+        try:
+            from app.models.warranty import WarrantyClaim
+            from app.models.repair import Repair
+
+            # Open warranty claims = not closed/rejected
+            wc_q = select(func.count(WarrantyClaim.id)).where(
+                WarrantyClaim.business_id == business_id,
+                WarrantyClaim.status.notin_(["closed", "rejected"]),
+            )
+            wc_res = await db.execute(wc_q)
+            open_warranty_claims_count = int(wc_res.scalar() or 0)
+
+            # Active repairs = not collected/cancelled
+            ar_q = select(func.count(Repair.id)).where(
+                Repair.business_id == business_id,
+                Repair.status.notin_(["collected", "cancelled"]),
+            )
+            ar_res = await db.execute(ar_q)
+            active_repairs_count = int(ar_res.scalar() or 0)
+        except Exception:
+            open_warranty_claims_count = 0
+            active_repairs_count = 0
+
         return DashboardSummaryResponse(
             today_sales_total=today_sales_total,
             today_sales_count=today_sales_count,
@@ -174,8 +198,8 @@ class ReportService:
             total_products_count=len(products_with_cat) + serialized_count,
             low_stock_count=low_stock_count,
             out_of_stock_count=out_of_stock_count,
-            open_warranty_claims_count=0,
-            active_repairs_count=0,
+            open_warranty_claims_count=open_warranty_claims_count,
+            active_repairs_count=active_repairs_count,
             top_selling_products=top_selling,
             low_stock_items=low_stock_items[:10],
         )
@@ -273,6 +297,55 @@ class ReportService:
                     timestamp=mv.created_at,
                 )
             )
+
+        # 4. Recent warranty claims
+        try:
+            from app.models.warranty import WarrantyClaim
+
+            wc_q = (
+                select(WarrantyClaim)
+                .where(WarrantyClaim.business_id == business_id)
+                .order_by(WarrantyClaim.created_at.desc())
+                .limit(limit)
+            )
+            wc_res = await db.execute(wc_q)
+            for wc in wc_res.scalars().all():
+                activities.append(
+                    DashboardActivityItem(
+                        id=f"warranty_claim_{wc.id}",
+                        activity_type="warranty",
+                        title=f"Warranty Claim {wc.status.replace('_', ' ').title()}",
+                        description=f"Diagnosis: {(wc.diagnosis or '—')[:60]}",
+                        timestamp=wc.created_at,
+                    )
+                )
+        except Exception:
+            pass
+
+        # 5. Recent repairs
+        try:
+            from app.models.repair import Repair
+
+            rep_q = (
+                select(Repair)
+                .where(Repair.business_id == business_id)
+                .order_by(Repair.created_at.desc())
+                .limit(limit)
+            )
+            rep_res = await db.execute(rep_q)
+            for r in rep_res.scalars().all():
+                label = r.device_description or (f"Device {r.device_id[:8]}" if r.device_id else "Repair")
+                activities.append(
+                    DashboardActivityItem(
+                        id=f"repair_{r.id}",
+                        activity_type="repair",
+                        title=f"Repair {r.status.replace('_', ' ').title()}: {label[:40]}",
+                        description=f"{r.problem_description[:60]}",
+                        timestamp=r.created_at,
+                    )
+                )
+        except Exception:
+            pass
 
         activities.sort(key=lambda a: a.timestamp, reverse=True)
         return activities[:limit]

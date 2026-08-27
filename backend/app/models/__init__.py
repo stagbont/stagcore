@@ -9,6 +9,7 @@ from app.models.inventory import InventoryMovement, MovementType
 from app.models.location import Location
 from app.models.product import Product, ProductStatus
 from app.models.purchase import PaymentStatus, Purchase, PurchaseItem, PurchaseStatus
+from app.models.sale import PaymentMethod, Sale, SaleItem, SaleStatus
 from app.models.supplier import Supplier
 
 __all__ = [
@@ -35,4 +36,8 @@ __all__ = [
     "PurchaseItem",
     "PurchaseStatus",
     "PaymentStatus",
+    "Sale",
+    "SaleItem",
+    "SaleStatus",
+    "PaymentMethod",
 ]

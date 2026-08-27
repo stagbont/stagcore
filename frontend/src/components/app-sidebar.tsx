@@ -49,8 +49,11 @@ export function AppSidebar() {
 
   const navItems = [
     { href: "/dashboard", label: "Dashboard" },
+    { href: "/categories", label: "Categories" },
     { href: "/products", label: "Products" },
     { href: "/devices", label: "Devices" },
+    { href: "/inventory", label: "Inventory" },
+    { href: "/locations", label: "Locations" },
     { href: "/purchases", label: "Purchases" },
     { href: "/sales", label: "Sales" },
     ...(features.customers ? [{ href: "/customers", label: "Customers" }] : []),

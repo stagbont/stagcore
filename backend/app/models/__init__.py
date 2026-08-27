@@ -5,6 +5,8 @@ from app.models.category import Category
 from app.models.customer import Customer
 from app.models.device import Device, DeviceStatus
 from app.models.feature import BusinessFeature
+from app.models.inventory import InventoryMovement, MovementType
+from app.models.location import Location
 from app.models.product import Product, ProductStatus
 from app.models.supplier import Supplier
 
@@ -25,4 +27,7 @@ __all__ = [
     "ProductStatus",
     "Device",
     "DeviceStatus",
+    "Location",
+    "InventoryMovement",
+    "MovementType",
 ]

@@ -134,12 +134,39 @@ async def update_device(device_id: str, payload: DeviceUpdate, current_user: dic
             if existing.scalars().first():
                 raise HTTPException(status_code=409, detail=f"IMEI '{payload.imei}' already exists")
         dev.imei = payload.imei
-    for field in ["product_name", "category_id", "supplier_id", "brand", "spec", "cost_price", "selling_price", "status", "location_id"]:
+    # Handle status change via InventoryService to create ledger entry
+    if payload.status is not None and payload.status != dev.status:
+        from app.services.inventory import InventoryService
+
+        try:
+            await InventoryService.record_device_movement(db, dev.business_id, dev.id, payload.status, payload.location_id, created_by=current_user["id"])
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        # Status and location handled by service; remove them from generic handling
+        payload_status_handled = True
+    else:
+        payload_status_handled = False
+        # If status not changing but location_id is being set alone, handle it
+        if payload.location_id is not None and payload.location_id != dev.location_id:
+            # Validate location belongs to business
+            if payload.location_id:
+                from app.models.location import Location
+
+                result = await db.execute(select(Location).where(Location.id == payload.location_id, Location.business_id == dev.business_id))
+                if not result.scalars().first():
+                    raise HTTPException(status_code=400, detail="Invalid location_id for this business")
+            dev.location_id = payload.location_id
+
+    for field in ["product_name", "category_id", "supplier_id", "brand", "spec", "cost_price", "selling_price"]:
         val = getattr(payload, field)
         if val is not None:
             setattr(dev, field, val)
         elif field in payload.model_fields_set and val is None:
             setattr(dev, field, None)
+    # Only set status/location via generic path if not already handled
+    if not payload_status_handled:
+        if payload.status is not None:
+            dev.status = payload.status
     dev.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(dev)

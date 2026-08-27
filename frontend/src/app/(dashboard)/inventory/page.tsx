@@ -16,6 +16,7 @@ type Product = { id: string; name: string; sku: string | null; minimum_stock_lev
 type StockInfo = { product_id: string; current_stock: number };
 type Movement = { id: string; product_id: string | null; type: string; quantity: number; created_at: string; reference: string | null; notes: string | null };
 type LowStock = { product_id: string; name: string; sku: string | null; current_stock: number; minimum_stock_level: number };
+type Location = { id: string; name: string };
 
 export default function InventoryPage() {
   const { data: session } = useSession();
@@ -32,14 +33,19 @@ export default function InventoryPage() {
     notes: "",
     location_id: "",
   });
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [filterLocation, setFilterLocation] = useState<string>("all");
 
   async function load() {
     if (!token) return;
     setError("");
-    const [prodRes, lowRes, movRes] = await Promise.all([
+    const locQ = filterLocation !== "all" ? `?location_id=${filterLocation}` : "";
+    const movQ = filterLocation !== "all" ? `?limit=20&location_id=${filterLocation}` : "?limit=20";
+    const [prodRes, lowRes, movRes, locRes] = await Promise.all([
       fetch(`${API_URL}/api/v1/products/`, { headers: { Authorization: `Bearer ${token}` } }),
       fetch(`${API_URL}/api/v1/inventory/low-stock`, { headers: { Authorization: `Bearer ${token}` } }),
-      fetch(`${API_URL}/api/v1/inventory/movements?limit=20`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API_URL}/api/v1/inventory/movements${movQ}`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API_URL}/api/v1/locations/`, { headers: { Authorization: `Bearer ${token}` } }),
     ]);
     if (!prodRes.ok) {
       setError(await prodRes.text());
@@ -49,10 +55,12 @@ export default function InventoryPage() {
     setProducts(prods);
     if (lowRes.ok) setLowStock(await lowRes.json());
     if (movRes.ok) setMovements(await movRes.json());
-    // Fetch stock for each product
+    if (locRes.ok) setLocations(await locRes.json());
+    // Fetch stock for each product (per location if filter)
     const stockEntries = await Promise.all(
       prods.map(async (p: Product) => {
-        const r = await fetch(`${API_URL}/api/v1/inventory/stock/${p.id}`, { headers: { Authorization: `Bearer ${token}` } });
+        const url = filterLocation !== "all" ? `${API_URL}/api/v1/inventory/stock/${p.id}?location_id=${filterLocation}` : `${API_URL}/api/v1/inventory/stock/${p.id}`;
+        const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
         if (r.ok) {
           const data: StockInfo = await r.json();
           return [p.id, data.current_stock] as const;
@@ -67,7 +75,7 @@ export default function InventoryPage() {
 
   useEffect(() => {
     load();
-  }, [token]);
+  }, [token, filterLocation]);
 
   async function handleAction(e: React.FormEvent) {
     e.preventDefault();
@@ -101,9 +109,21 @@ export default function InventoryPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-semibold">Inventory</h1>
-        <p className="text-sm text-muted-foreground">Stock is derived from movements — never edited directly</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">Inventory</h1>
+          <p className="text-sm text-muted-foreground">Stock is derived from movements — never edited directly</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Label className="text-xs">Location filter</Label>
+          <Select value={filterLocation} onValueChange={setFilterLocation}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All locations</SelectItem>
+              {locations.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       {error && <p className="text-sm text-[var(--status-critical)] border border-hairline rounded-md p-3 bg-surface">{error}</p>}
 
@@ -195,10 +215,20 @@ export default function InventoryPage() {
                 <Input type="number" value={action.quantity} onChange={(e) => setAction({ ...action, quantity: e.target.value })} min="1" />
               </div>
               <div className="flex flex-col gap-2">
+                <Label>Location (optional)</Label>
+                <Select value={action.location_id || "none"} onValueChange={(v) => setAction({ ...action, location_id: v === "none" ? "" : v })}>
+                  <SelectTrigger><SelectValue placeholder="All / Global" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">All locations</SelectItem>
+                    {locations.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-2">
                 <Label>Notes (optional)</Label>
                 <Input value={action.notes} onChange={(e) => setAction({ ...action, notes: e.target.value })} placeholder="reference or note" />
               </div>
-              <Button type="submit">Apply</Button>
+              <Button type="submit" className="min-h-11">Apply</Button>
             </form>
           </CardContent>
         </Card>

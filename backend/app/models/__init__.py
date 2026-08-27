@@ -10,8 +10,17 @@ from app.models.location import Location
 from app.models.product import Product, ProductStatus
 from app.models.purchase import PaymentStatus, Purchase, PurchaseItem, PurchaseStatus
 from app.models.repair import Repair, RepairStatus, REPAIR_ALLOWED_TRANSITIONS
+from app.models.return_ import (
+    PurchaseReturn,
+    PurchaseReturnItem,
+    PurchaseReturnReason,
+    SaleReturn,
+    SaleReturnItem,
+    SaleReturnReason,
+)
 from app.models.sale import PaymentMethod, Sale, SaleItem, SaleStatus
 from app.models.supplier import Supplier
+from app.models.transfer import StockTransfer, StockTransferStatus
 from app.models.warranty import Warranty, WarrantyClaim, WarrantyClaimResolution, WarrantyClaimStatus, WarrantyStatus
 
 __all__ = [
@@ -50,4 +59,12 @@ __all__ = [
     "Repair",
     "RepairStatus",
     "REPAIR_ALLOWED_TRANSITIONS",
+    "StockTransfer",
+    "StockTransferStatus",
+    "SaleReturn",
+    "SaleReturnItem",
+    "SaleReturnReason",
+    "PurchaseReturn",
+    "PurchaseReturnItem",
+    "PurchaseReturnReason",
 ]

@@ -631,6 +631,20 @@ class ReportService:
 
         gross_profit = total_revenue - total_cogs
         gross_margin_percentage = ((gross_profit / total_revenue) * Decimal("100.00")) if total_revenue > 0 else Decimal("0.00")
+        # Net refunds for returns in period
+        try:
+            from app.models.return_ import SaleReturn
+
+            ret_q = select(SaleReturn).where(SaleReturn.business_id == business_id, SaleReturn.created_at >= start_date, SaleReturn.created_at <= end_date)
+            ret_res = await db.execute(ret_q)
+            total_refunds = sum((r.refund_amount for r in ret_res.scalars().all()), Decimal("0.00"))
+            if total_refunds:
+                net_revenue = total_revenue - total_refunds
+                gross_profit = net_revenue - total_cogs
+                gross_margin_percentage = ((gross_profit / net_revenue) * Decimal("100.00")) if net_revenue > 0 else Decimal("0.00")
+                total_revenue = net_revenue
+        except Exception:
+            pass
 
         return ProfitReportResponse(
             start_date=start_date,

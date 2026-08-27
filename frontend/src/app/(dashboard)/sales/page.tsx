@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { BarcodeScanner } from "@/components/scanner/barcode-scanner";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 type SaleItem = { id: string; product_id: string | null; device_id: string | null; quantity: number; selling_price: string; discount: string; warranty_months_override: number | null };
@@ -34,6 +35,11 @@ export default function SalesPage() {
   const [quickCustomer, setQuickCustomer] = useState({ name: "", phone: "" });
   const [items, setItems] = useState<{ product_id: string; device_id: string; quantity: string; selling_price: string; discount: string; warranty_override: string; mode: "product" | "device" }[]>([]);
   const [draft, setDraft] = useState({ mode: "product" as "product" | "device", product_id: "", device_id: "", quantity: "1", selling_price: "0.00", discount: "0.00", warranty_override: "" });
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerMode, setScannerMode] = useState<"product" | "device">("product");
+  const [hasBarcodeFeature, setHasBarcodeFeature] = useState(false);
+  const [returnOpen, setReturnOpen] = useState<string | null>(null);
+  const [returnForm, setReturnForm] = useState<{ items: { sale_item_id: string; quantity: string; refund: string; checked: boolean }[]; reason: string; refund_method: string; restock: boolean; notes: string }>({ items: [], reason: "other", refund_method: "cash", restock: true, notes: "" });
 
   async function load() {
     if (!token) return;
@@ -67,7 +73,75 @@ export default function SalesPage() {
     else setLocations([]);
   }
 
-  useEffect(() => { load(); }, [token]);
+  useEffect(() => {
+    load();
+    // check barcode flag
+    async function checkFlag() {
+      if (!token) return;
+      try {
+        const bizRes = await fetch(`${API_URL}/api/v1/business/`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!bizRes.ok) return;
+        const businesses = await bizRes.json();
+        if (!businesses.length) return;
+        const featRes = await fetch(`${API_URL}/api/v1/business/${businesses[0].id}/features`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!featRes.ok) return;
+        const data = await featRes.json();
+        const m: Record<string, boolean> = {};
+        for (const f of data.features as { feature_key: string; enabled: boolean }[]) m[f.feature_key] = f.enabled;
+        setHasBarcodeFeature(!!m.barcode_scanning);
+      } catch {}
+    }
+    checkFlag();
+  }, [token]);
+
+  async function handleScan(code: string) {
+    const clean = code.trim();
+    if (!clean) return;
+    if (scannerMode === "product") {
+      const r = await fetch(`${API_URL}/api/v1/scan/by-barcode/${encodeURIComponent(clean)}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) { setError(await r.text()); return; }
+      const p = await r.json();
+      setDraft({ ...draft, mode: "product", product_id: p.id, selling_price: String(p.selling_price), quantity: "1" });
+      setError("");
+    } else {
+      // try IMEI then serial
+      let dr = await fetch(`${API_URL}/api/v1/scan/by-imei/${encodeURIComponent(clean)}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!dr.ok) dr = await fetch(`${API_URL}/api/v1/scan/by-serial/${encodeURIComponent(clean)}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!dr.ok) { setError(await dr.text()); return; }
+      const d = await dr.json();
+      if (d.status !== "in_stock") { setError(`Device ${clean} status ${d.status} not sellable`); return; }
+      setDraft({ ...draft, mode: "device", device_id: d.id, selling_price: String(d.selling_price) });
+      setError("");
+    }
+  }
+
+  async function openReturn(sale: Sale) {
+    setReturnOpen(sale.id);
+    setReturnForm({
+      items: sale.items.map((it) => ({ sale_item_id: it.id, quantity: String(it.quantity), refund: String((parseFloat(it.selling_price) - parseFloat(it.discount)).toFixed(2)), checked: false })),
+      reason: "other", refund_method: "cash", restock: true, notes: ""
+    });
+  }
+
+  async function submitReturn() {
+    if (!returnOpen) return;
+    const sale = sales.find((s) => s.id === returnOpen);
+    if (!sale) return;
+    const chosen = returnForm.items.filter((i) => i.checked);
+    if (!chosen.length) { setError("Select at least one item to return"); return; }
+    const body = {
+      items: chosen.map((i) => ({ sale_item_id: i.sale_item_id, quantity: parseInt(i.quantity) || 1, refund_amount: i.refund || null })),
+      reason: returnForm.reason,
+      refund_method: returnForm.refund_method,
+      restock: returnForm.restock,
+      notes: returnForm.notes || null,
+      location_id: sale.location_id,
+    };
+    const r = await fetch(`${API_URL}/api/v1/returns/sales/${returnOpen}/return`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+    if (!r.ok) { setError(await r.text()); return; }
+    setReturnOpen(null);
+    load();
+  }
 
   async function handleQuickAddCustomer() {
     if (!quickCustomer.name) {
@@ -248,6 +322,12 @@ export default function SalesPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="flex gap-2 mb-2">
+                  <Button type="button" variant="outline" size="sm" className="min-h-11 flex-1" onClick={() => { setScannerMode(draft.mode); setScannerOpen(true); }} disabled={!hasBarcodeFeature} title={hasBarcodeFeature ? "Scan barcode/IMEI" : "Barcode scanning disabled"}>
+                    Scan {draft.mode === "product" ? "Barcode" : "IMEI/Serial"}
+                  </Button>
+                  <span className="text-xs text-muted-foreground self-center">{hasBarcodeFeature ? "camera" : "flag off"}</span>
+                </div>
                 {draft.mode === "product" ? (
                   <div className="grid grid-cols-4 gap-2">
                     <Select value={draft.product_id || "none"} onValueChange={(v) => {
@@ -343,6 +423,7 @@ export default function SalesPage() {
                   <TableCell className="tabular-nums">{String(s.total_amount)}</TableCell>
                   <TableCell className="text-right flex gap-1 justify-end flex-wrap">
                     {s.status === "draft" && <Button size="sm" onClick={() => handleComplete(s.id)}>Complete</Button>}
+                    {s.status === "completed" && <Button variant="outline" size="sm" onClick={() => openReturn(s)}>Return</Button>}
                     {s.status !== "cancelled" && <Button variant="outline" size="sm" onClick={() => handleCancel(s.id)}>Cancel</Button>}
                     <Button variant="outline" size="sm" onClick={() => handleDelete(s.id)} disabled={s.status !== "draft"}>Delete</Button>
                   </TableCell>
@@ -357,6 +438,61 @@ export default function SalesPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <BarcodeScanner open={scannerOpen} onOpenChange={setScannerOpen} onDetected={handleScan} />
+
+      <Dialog open={!!returnOpen} onOpenChange={(v) => !v && setReturnOpen(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+          <DialogHeader><DialogTitle>Return Items</DialogTitle></DialogHeader>
+          <div className="flex flex-col gap-4">
+            {returnForm.items.map((it, idx) => {
+              const si = sales.find((s) => s.id === returnOpen)?.items.find((x) => x.id === it.sale_item_id);
+              return (
+                <div key={it.sale_item_id} className="flex items-center gap-2 border border-hairline rounded-md p-3">
+                  <input type="checkbox" checked={it.checked} onChange={(e) => setReturnForm({ ...returnForm, items: returnForm.items.map((x, i) => i === idx ? { ...x, checked: e.target.checked } : x) })} />
+                  <span className="text-sm flex-1 tabular-nums">{si?.product_id ? `Product ${si.product_id.slice(0, 8)}` : `Device ${si?.device_id?.slice(0, 8)}`} — qty {si?.quantity}</span>
+                  <Input type="number" className="w-20" value={it.quantity} onChange={(e) => setReturnForm({ ...returnForm, items: returnForm.items.map((x, i) => i === idx ? { ...x, quantity: e.target.value } : x) })} min="1" />
+                  <Input type="number" step="0.01" className="w-24" value={it.refund} onChange={(e) => setReturnForm({ ...returnForm, items: returnForm.items.map((x, i) => i === idx ? { ...x, refund: e.target.value } : x) })} placeholder="Refund" />
+                </div>
+              );
+            })}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <Label>Reason</Label>
+                <Select value={returnForm.reason} onValueChange={(v) => setReturnForm({ ...returnForm, reason: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="damaged">Damaged</SelectItem>
+                    <SelectItem value="wrong_item">Wrong item</SelectItem>
+                    <SelectItem value="warranty">Warranty</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label>Refund method</Label>
+                <Select value={returnForm.refund_method} onValueChange={(v) => setReturnForm({ ...returnForm, refund_method: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" checked={returnForm.restock} onChange={(e) => setReturnForm({ ...returnForm, restock: e.target.checked })} />
+              <Label>Restock (return to inventory)</Label>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Notes</Label>
+              <Input value={returnForm.notes} onChange={(e) => setReturnForm({ ...returnForm, notes: e.target.value })} />
+            </div>
+            <Button onClick={submitReturn} className="min-h-11">Submit Return</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

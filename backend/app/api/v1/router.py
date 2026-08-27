@@ -15,8 +15,11 @@ from app.api.v1 import (
     purchases,
     repairs,
     reports,
+    returns,
     sales,
+    scan,
     suppliers,
+    transfers,
     warranties,
 )
 
@@ -36,6 +39,9 @@ api_router.include_router(sales.router, prefix="/sales", tags=["sales"])
 api_router.include_router(warranties.router, tags=["warranties"])
 api_router.include_router(repairs.router, prefix="/repairs", tags=["repairs"])
 api_router.include_router(device_history.router, tags=["device_history"])
+api_router.include_router(transfers.router, prefix="/transfers", tags=["transfers"])
+api_router.include_router(scan.router, prefix="/scan", tags=["scan"])
+api_router.include_router(returns.router, prefix="/returns", tags=["returns"])
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 api_router.include_router(reports.router, prefix="/reports", tags=["reports"])
 

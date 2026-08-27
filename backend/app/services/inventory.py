@@ -234,7 +234,11 @@ class InventoryService:
             DeviceStatus.RETURNED.value: MovementType.CUSTOMER_RETURN.value,
         }
         mv_type = type_map.get(to_status, MovementType.ADJUSTMENT_OUT.value)
-        qty = 1 if to_status == DeviceStatus.IN_STOCK.value else -1
+        # RETURNED devices restock on return (+1), sold/in_repair are outflows (-1)
+        if to_status == DeviceStatus.RETURNED.value:
+            qty = 1
+        else:
+            qty = 1 if to_status == DeviceStatus.IN_STOCK.value else -1
         # Special handling for device: we store device_id and product_id is None (or could be linked to product if devices were tied to product)
         mv = InventoryMovement(
             id=str(uuid.uuid4()),
@@ -255,6 +259,108 @@ class InventoryService:
         dev.updated_at = datetime.now(timezone.utc)
         await db.flush()
         return mv
+
+    @staticmethod
+    async def transfer_stock(
+        db: AsyncSession,
+        business_id: str,
+        product_id: str,
+        quantity: int,
+        from_location_id: str,
+        to_location_id: str,
+        notes: str | None = None,
+        reference: str | None = None,
+        created_by: str | None = None,
+    ) -> tuple[InventoryMovement, InventoryMovement]:
+        if quantity <= 0:
+            raise ValueError("Quantity must be > 0")
+        if from_location_id == to_location_id:
+            raise ValueError("from_location and to_location must differ")
+        await InventoryService._validate_product(db, business_id, product_id)
+        await InventoryService._validate_location(db, business_id, from_location_id)
+        await InventoryService._validate_location(db, business_id, to_location_id)
+        current = await InventoryService.get_current_stock(db, business_id, product_id, from_location_id)
+        if current < quantity:
+            raise ValueError(f"Insufficient stock at source: have {current}, need {quantity}")
+        # Atomic pair
+        out_mv = InventoryMovement(
+            id=str(uuid.uuid4()),
+            business_id=business_id,
+            product_id=product_id,
+            location_id=from_location_id,
+            type=MovementType.TRANSFER_OUT.value,
+            quantity=-quantity,
+            reference=reference,
+            created_by=created_by,
+            created_at=datetime.now(timezone.utc),
+            notes=notes or f"Transfer {quantity} from {from_location_id} to {to_location_id}",
+        )
+        in_mv = InventoryMovement(
+            id=str(uuid.uuid4()),
+            business_id=business_id,
+            product_id=product_id,
+            location_id=to_location_id,
+            type=MovementType.TRANSFER_IN.value,
+            quantity=quantity,
+            reference=reference,
+            created_by=created_by,
+            created_at=datetime.now(timezone.utc),
+            notes=notes or f"Transfer {quantity} from {from_location_id} to {to_location_id}",
+        )
+        db.add(out_mv)
+        db.add(in_mv)
+        await db.flush()
+        return out_mv, in_mv
+
+    @staticmethod
+    async def transfer_device(
+        db: AsyncSession,
+        business_id: str,
+        device_id: str,
+        to_location_id: str,
+        notes: str | None = None,
+        reference: str | None = None,
+        created_by: str | None = None,
+    ) -> tuple[InventoryMovement, InventoryMovement]:
+        result = await db.execute(select(Device).where(Device.id == device_id, Device.business_id == business_id))
+        dev = result.scalars().first()
+        if not dev:
+            raise ValueError("Device not found for this business")
+        await InventoryService._validate_location(db, business_id, to_location_id)
+        from_loc = dev.location_id
+        if from_loc == to_location_id:
+            raise ValueError("Device already at target location")
+        # Allow any status per grilled decision
+        out_mv = InventoryMovement(
+            id=str(uuid.uuid4()),
+            business_id=business_id,
+            device_id=device_id,
+            location_id=from_loc,
+            type=MovementType.TRANSFER_OUT.value,
+            quantity=-1,
+            reference=reference,
+            created_by=created_by,
+            created_at=datetime.now(timezone.utc),
+            notes=notes or f"Device {dev.serial_number} transfer {from_loc} -> {to_location_id}",
+        )
+        in_mv = InventoryMovement(
+            id=str(uuid.uuid4()),
+            business_id=business_id,
+            device_id=device_id,
+            location_id=to_location_id,
+            type=MovementType.TRANSFER_IN.value,
+            quantity=1,
+            reference=reference,
+            created_by=created_by,
+            created_at=datetime.now(timezone.utc),
+            notes=notes or f"Device {dev.serial_number} transfer {from_loc} -> {to_location_id}",
+        )
+        db.add(out_mv)
+        db.add(in_mv)
+        dev.location_id = to_location_id
+        dev.updated_at = datetime.now(timezone.utc)
+        await db.flush()
+        return out_mv, in_mv
 
     @staticmethod
     async def get_low_stock_products(db: AsyncSession, business_id: str):

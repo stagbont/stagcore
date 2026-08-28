@@ -1,16 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-type ReportTab = "sales" | "inventory" | "profit" | "products" | "suppliers";
+type ReportTab = "sales" | "inventory" | "profit" | "products" | "suppliers" | "intelligence";
+
+interface Category { id: string; name: string; }
+interface Location { id: string; name: string; }
 
 export default function ReportsPage() {
   const { data: session } = useSession();
@@ -29,6 +34,21 @@ export default function ReportsPage() {
   const [profitReport, setProfitReport] = useState<any>(null);
   const [productPerfReport, setProductPerfReport] = useState<any>(null);
   const [supplierReport, setSupplierReport] = useState<any>(null);
+
+  // Intelligence state
+  const [intelligence, setIntelligence] = useState<any>(null);
+  const [intelWindow, setIntelWindow] = useState<number>(30);
+  const [intelLead, setIntelLead] = useState<string>("7");
+  const [intelSafety, setIntelSafety] = useState<string>("3");
+  const [intelCoverage, setIntelCoverage] = useState<string>("30");
+  const [intelLocation, setIntelLocation] = useState<string>("all");
+  const [intelCategory, setIntelCategory] = useState<string>("all");
+  const [intelSearch, setIntelSearch] = useState<string>("");
+  const [intelSort, setIntelSort] = useState<string>("urgency");
+  const [intelError, setIntelError] = useState<string>("");
+  const [intelFlagBlocked, setIntelFlagBlocked] = useState(false);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   // Initialize dates
   useEffect(() => {
@@ -76,11 +96,31 @@ export default function ReportsPage() {
     loadBusiness();
   }, [session]);
 
+  // Load locations + categories once businessId known (for intelligence filters)
+  useEffect(() => {
+    async function loadMeta() {
+      const token = (session?.session as unknown as { token?: string } | undefined)?.token;
+      if (!token || !businessId) return;
+      try {
+        const [locRes, catRes] = await Promise.all([
+          fetch(`${API_URL}/api/v1/locations/`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API_URL}/api/v1/categories/`, { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+        if (locRes.ok) setLocations(await locRes.json());
+        if (catRes.ok) setCategories(await catRes.json());
+      } catch {}
+    }
+    loadMeta();
+  }, [businessId, session]);
+
   // Fetch report when tab, dates or business changes
   useEffect(() => {
     async function fetchActiveReport() {
       const token = (session?.session as unknown as { token?: string } | undefined)?.token;
       if (!token || !businessId) return;
+
+      // Intelligence is fetched via separate effect to react to its own controls
+      if (activeTab === "intelligence") return;
 
       try {
         setLoading(true);
@@ -131,10 +171,78 @@ export default function ReportsPage() {
     fetchActiveReport();
   }, [activeTab, businessId, startDate, endDate, session]);
 
+  // Intelligence fetch effect
+  useEffect(() => {
+    async function fetchIntelligence() {
+      const token = (session?.session as unknown as { token?: string } | undefined)?.token;
+      if (!token || !businessId || activeTab !== "intelligence") return;
+      try {
+        setLoading(true);
+        setIntelError("");
+        setIntelFlagBlocked(false);
+        const params = new URLSearchParams({
+          business_id: businessId,
+          window_days: String(intelWindow),
+          lead_time_days: String(parseInt(intelLead) || 7),
+          safety_days: String(parseInt(intelSafety) || 0),
+          coverage_days: String(parseInt(intelCoverage) || 30),
+          sort_by: intelSort,
+          limit: "100",
+          offset: "0",
+        });
+        if (intelLocation !== "all") params.set("location_id", intelLocation);
+        if (intelCategory !== "all") params.set("category_id", intelCategory);
+        if (intelSearch.trim()) params.set("search", intelSearch.trim());
+        const res = await fetch(`${API_URL}/api/v1/intelligence/overview?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          setIntelligence(await res.json());
+        } else {
+          const txt = await res.text();
+          if (res.status === 403 && txt.toLowerCase().includes("advanced_reports")) {
+            setIntelFlagBlocked(true);
+            setIntelError("");
+          } else {
+            setIntelError(txt);
+          }
+        }
+      } catch (e) {
+        setIntelError(String(e));
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchIntelligence();
+  }, [activeTab, businessId, intelWindow, intelLead, intelSafety, intelCoverage, intelLocation, intelCategory, intelSearch, intelSort, session]);
+
   const formatCurrency = (val?: string | number) => {
     if (val === undefined || val === null) return "$0.00";
     const n = typeof val === "number" ? val : parseFloat(val);
     return isNaN(n) ? "$0.00" : `$${n.toFixed(2)}`;
+  };
+
+  const formatVelocity = (val?: string | number) => {
+    if (val === undefined || val === null) return "—";
+    const n = typeof val === "number" ? val : parseFloat(val);
+    if (isNaN(n)) return "—";
+    return `${n.toFixed(2)}/day`;
+  };
+
+  const formatStockout = (days?: number | null, dateStr?: string | null) => {
+    if (days === null || days === undefined) return "—";
+    if (days === 0) return "Today";
+    if (days === 1) return "1 day";
+    const d = dateStr ? new Date(dateStr).toLocaleDateString() : "";
+    return `${days}d${d ? ` · ${d}` : ""}`;
+  };
+
+  const statusBadge = (status: string) => {
+    if (status === "out_of_stock") return <Badge variant="destructive" className="text-[10px] uppercase">Out</Badge>;
+    if (status === "critical") return <Badge variant="destructive" className="text-[10px] uppercase bg-[var(--status-critical)]/10 text-[var(--status-critical)] border-[var(--status-critical)]/20">Critical</Badge>;
+    if (status === "low") return <Badge variant="outline" className="text-[10px] uppercase text-amber-600 border-amber-500/30">Low</Badge>;
+    if (status === "stable") return <Badge variant="secondary" className="text-[10px]">Stable</Badge>;
+    return <Badge variant="secondary" className="text-[10px]">OK</Badge>;
   };
 
   return (
@@ -164,6 +272,7 @@ export default function ReportsPage() {
             { key: "profit", label: "Profit & Loss" },
             { key: "products", label: "Product Performance" },
             { key: "suppliers", label: "Supplier Analytics" },
+            { key: "intelligence", label: "Intelligence" },
           ].map((tab) => {
             const active = activeTab === tab.key;
             return (
@@ -181,7 +290,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Date Filter Controls (applicable to date-bound reports) */}
-        {activeTab !== "inventory" && activeTab !== "suppliers" && (
+        {activeTab !== "inventory" && activeTab !== "suppliers" && activeTab !== "intelligence" && (
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1 rounded-md border border-hairline bg-surface p-1">
               {(["today", "7d", "30d", "custom"] as const).map((preset) => (
@@ -821,6 +930,203 @@ export default function ReportsPage() {
               </Table>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* TAB 6: INTELLIGENCE */}
+      {activeTab === "intelligence" && (
+        <div className="flex flex-col gap-6">
+          {intelFlagBlocked ? (
+            <Card className="border-hairline bg-surface">
+              <CardHeader>
+                <CardTitle className="text-base">Intelligence is disabled</CardTitle>
+                <CardDescription className="text-xs">
+                  This business does not have Advanced Reports enabled. Ask your platform admin to enable <span className="font-medium text-foreground">advanced_reports</span> in Admin → Features to view velocity, stockout forecasts, and reorder suggestions.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Link href="/admin/features">
+                  <Button variant="outline" size="sm" className="border-hairline">Go to Admin Features</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* Controls */}
+              <Card className="border-hairline">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base font-semibold">Intelligence Controls</CardTitle>
+                  <CardDescription className="text-xs">
+                    Velocity = units sold ÷ window · Reorder point = velocity × (lead + safety) · Suggested = ceil(velocity × (lead + coverage) − current stock)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  {/* Window presets */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">Window:</span>
+                    <div className="flex items-center gap-1 rounded-md border border-hairline bg-surface p-1">
+                      {[7, 14, 30, 60, 90].map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setIntelWindow(d)}
+                          className={`rounded px-2.5 py-1 text-xs font-medium transition-colors min-h-7 ${intelWindow === d ? "bg-background text-foreground shadow-sm border border-hairline" : "text-muted-foreground hover:text-foreground"}`}
+                        >
+                          {d}d
+                        </button>
+                      ))}
+                    </div>
+                    <span className="text-xs text-muted-foreground ml-2">Lead</span>
+                    <Input type="number" min="1" max="90" value={intelLead} onChange={(e) => setIntelLead(e.target.value)} className="h-8 w-16 text-xs border-hairline tabular-nums" />
+                    <span className="text-xs text-muted-foreground">Safety</span>
+                    <Input type="number" min="0" max="90" value={intelSafety} onChange={(e) => setIntelSafety(e.target.value)} className="h-8 w-16 text-xs border-hairline tabular-nums" />
+                    <span className="text-xs text-muted-foreground">Coverage</span>
+                    <Input type="number" min="1" max="365" value={intelCoverage} onChange={(e) => setIntelCoverage(e.target.value)} className="h-8 w-20 text-xs border-hairline tabular-nums" />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select value={intelLocation} onValueChange={setIntelLocation}>
+                      <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Location" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All locations</SelectItem>
+                        {locations.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Select value={intelCategory} onValueChange={setIntelCategory}>
+                      <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Category" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All categories</SelectItem>
+                        {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Select value={intelSort} onValueChange={setIntelSort}>
+                      <SelectTrigger className="w-40 h-8 text-xs"><SelectValue placeholder="Sort" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="urgency">Urgency</SelectItem>
+                        <SelectItem value="stockout_days">Stockout soonest</SelectItem>
+                        <SelectItem value="velocity_desc">Velocity high→low</SelectItem>
+                        <SelectItem value="stock_asc">Stock low→high</SelectItem>
+                        <SelectItem value="stock_desc">Stock high→low</SelectItem>
+                        <SelectItem value="name">Name A→Z</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <div className="flex-1 min-w-40 max-w-64">
+                      <Input placeholder="Search products…" value={intelSearch} onChange={(e) => setIntelSearch(e.target.value)} className="h-8 text-xs border-hairline" />
+                    </div>
+                  </div>
+                  {intelError && (
+                    <p className="text-xs text-[var(--status-critical)] border border-hairline rounded-md p-2 bg-[var(--status-critical)]/5">{intelError}</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* KPI cards */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <Card className="border-hairline bg-surface">
+                  <CardHeader className="pb-2"><CardDescription className="text-xs uppercase">Products Tracked</CardDescription><CardTitle className="text-2xl font-bold tabular-nums">{loading ? "..." : intelligence?.total_items ?? 0}</CardTitle></CardHeader>
+                  <CardContent><p className="text-xs text-muted-foreground">{intelligence ? `${intelligence.params.window_days}d window · ${intelligence.params.lead_time_days}d lead + ${intelligence.params.safety_days}d safety` : "—"}</p></CardContent>
+                </Card>
+                <Card className="border-hairline bg-surface">
+                  <CardHeader className="pb-2"><CardDescription className="text-xs uppercase">Critical</CardDescription><CardTitle className="text-2xl font-bold tabular-nums text-[var(--status-critical)]">{loading ? "..." : intelligence?.critical_count ?? 0}</CardTitle></CardHeader>
+                  <CardContent><p className="text-xs text-muted-foreground">≤ 50% of reorder point</p></CardContent>
+                </Card>
+                <Card className="border-hairline bg-surface">
+                  <CardHeader className="pb-2"><CardDescription className="text-xs uppercase">Low Stock</CardDescription><CardTitle className="text-2xl font-bold tabular-nums text-amber-600">{loading ? "..." : intelligence?.low_count ?? 0}</CardTitle></CardHeader>
+                  <CardContent><p className="text-xs text-muted-foreground">≤ reorder point</p></CardContent>
+                </Card>
+                <Card className="border-hairline bg-surface">
+                  <CardHeader className="pb-2"><CardDescription className="text-xs uppercase">Out of Stock</CardDescription><CardTitle className="text-2xl font-bold tabular-nums">{loading ? "..." : intelligence?.out_of_stock_count ?? 0}</CardTitle></CardHeader>
+                  <CardContent><p className="text-xs text-muted-foreground">{intelligence?.stable_count ?? 0} stable (no recent sales)</p></CardContent>
+                </Card>
+              </div>
+
+              {/* Intelligence Table */}
+              <Card className="border-hairline">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base font-semibold">Velocity & Reorder Advisory</CardTitle>
+                  <CardDescription className="text-xs">Read-only — reorder suggestion is advisory, never writes stock directly. Click Reorder to pre-fill a purchase.</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Product</TableHead>
+                          <TableHead>Category</TableHead>
+                          <TableHead className="text-right">Current</TableHead>
+                          <TableHead className="text-right">Min</TableHead>
+                          <TableHead className="text-right">Velocity</TableHead>
+                          <TableHead className="text-right">Days Until Stockout</TableHead>
+                          <TableHead className="text-right">Reorder Point</TableHead>
+                          <TableHead className="text-right">Suggested Qty</TableHead>
+                          <TableHead className="text-center">Status</TableHead>
+                          <TableHead className="text-right">Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {loading ? (
+                          <TableRow><TableCell colSpan={10} className="text-center py-6 text-sm text-muted-foreground">Computing velocity & stockout…</TableCell></TableRow>
+                        ) : intelligence?.items?.length ? (
+                          intelligence.items.map((item: any) => (
+                            <TableRow key={item.product_id}>
+                              <TableCell className="font-medium min-w-40">
+                                <div>{item.name}</div>
+                                {item.sku && <div className="text-xs text-muted-foreground tabular-nums">{item.sku}</div>}
+                              </TableCell>
+                              <TableCell className="text-muted-foreground text-sm">{item.category_name || "Uncategorized"}</TableCell>
+                              <TableCell className="text-right font-medium tabular-nums">{item.current_stock}</TableCell>
+                              <TableCell className="text-right text-muted-foreground tabular-nums">{item.minimum_stock_level}</TableCell>
+                              <TableCell className="text-right tabular-nums">{formatVelocity(item.daily_velocity)}</TableCell>
+                              <TableCell className="text-right tabular-nums text-xs">{formatStockout(item.days_until_stockout, item.estimated_stockout_date)}</TableCell>
+                              <TableCell className="text-right tabular-nums">{parseFloat(item.reorder_point).toFixed(2)}</TableCell>
+                              <TableCell className="text-right font-semibold tabular-nums">{item.suggested_order_qty}</TableCell>
+                              <TableCell className="text-center">{statusBadge(item.stock_status)}</TableCell>
+                              <TableCell className="text-right">
+                                {item.suggested_order_qty > 0 ? (
+                                  <Link href={`/purchases?product_id=${item.product_id}&qty=${item.suggested_order_qty}`}>
+                                    <Button variant="outline" size="sm" className="h-7 text-xs border-hairline min-h-7">Reorder</Button>
+                                  </Link>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow><TableCell colSpan={10} className="text-center py-6 text-sm text-muted-foreground">No products match the current filters.</TableCell></TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Category breakdown */}
+              {intelligence?.category_breakdown?.length > 0 && (
+                <Card className="border-hairline">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base font-semibold">Category Intelligence Breakdown</CardTitle>
+                    <CardDescription className="text-xs">Units and valuation per category for the filtered set</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader><TableRow><TableHead>Category</TableHead><TableHead className="text-right">Products</TableHead><TableHead className="text-right">Units In Stock</TableHead><TableHead className="text-right">Valuation</TableHead></TableRow></TableHeader>
+                      <TableBody>
+                        {intelligence.category_breakdown.map((cat: any) => (
+                          <TableRow key={cat.category_id || "uncat"}>
+                            <TableCell className="font-medium">{cat.category_name}</TableCell>
+                            <TableCell className="text-right tabular-nums">{cat.product_count}</TableCell>
+                            <TableCell className="text-right tabular-nums">{cat.units_in_stock}</TableCell>
+                            <TableCell className="text-right font-medium tabular-nums">{formatCurrency(cat.total_valuation)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>

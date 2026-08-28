@@ -27,6 +27,18 @@ interface LowStockItem {
   minimum_stock_level: number;
 }
 
+interface IntelligenceItem {
+  product_id: string;
+  name: string;
+  sku?: string | null;
+  current_stock: number;
+  daily_velocity: string | number;
+  days_until_stockout: number | null;
+  estimated_stockout_date: string | null;
+  stock_status: string;
+  suggested_order_qty: number;
+}
+
 interface DashboardSummary {
   today_sales_total: string | number;
   today_sales_count: number;
@@ -54,6 +66,7 @@ export default function DashboardPage() {
   const [business, setBusiness] = useState<{ id: string; name: string; slug: string } | null>(null);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [intelligenceMap, setIntelligenceMap] = useState<Record<string, IntelligenceItem>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -99,6 +112,22 @@ export default function DashboardPage() {
           const actData = await actRes.json();
           setActivities(actData);
         }
+
+        // Best-effort intelligence enrichment for urgency badges (gated by flag — ignore 403)
+        try {
+          const intelRes = await fetch(
+            `${API_URL}/api/v1/intelligence/overview?business_id=${biz.id}&window_days=30&sort_by=urgency&limit=100`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          if (intelRes.ok) {
+            const intel = await intelRes.json();
+            const map: Record<string, IntelligenceItem> = {};
+            for (const item of intel.items as IntelligenceItem[]) map[item.product_id] = item;
+            setIntelligenceMap(map);
+          }
+        } catch {
+          // ignore — dashboard still renders without intelligence
+        }
       } catch (e) {
         setError(String(e));
       } finally {
@@ -120,6 +149,37 @@ export default function DashboardPage() {
     } catch {
       return iso;
     }
+  };
+
+  const formatVelocity = (v?: string | number) => {
+    if (v === undefined || v === null) return "—";
+    const n = typeof v === "number" ? v : parseFloat(v);
+    if (isNaN(n) || n === 0) return "stable";
+    return `${n.toFixed(2)}/d`;
+  };
+
+  const stockoutLabel = (item: IntelligenceItem | undefined, _fallback: LowStockItem) => {
+    if (!item) return null;
+    if (item.stock_status === "stable") return "Stable · no recent sales";
+    if (item.days_until_stockout === null || item.days_until_stockout === undefined) return null;
+    if (item.days_until_stockout === 0) return "Stockout today";
+    if (item.days_until_stockout === 1) return "1 day left";
+    if (item.estimated_stockout_date) {
+      try {
+        return `${item.days_until_stockout}d · ${new Date(item.estimated_stockout_date).toLocaleDateString()}`;
+      } catch {
+        return `${item.days_until_stockout}d`;
+      }
+    }
+    return `${item.days_until_stockout}d`;
+  };
+
+  const urgencyBadgeClass = (status?: string) => {
+    if (status === "out_of_stock") return "bg-[var(--status-critical)]/10 text-[var(--status-critical)] border-[var(--status-critical)]/20";
+    if (status === "critical") return "bg-[var(--status-critical)]/10 text-[var(--status-critical)] border-[var(--status-critical)]/20";
+    if (status === "low") return "text-amber-600 border-amber-500/30";
+    if (status === "stable") return "bg-muted text-muted-foreground";
+    return "bg-emerald-500/10 text-emerald-700 border-emerald-500/20";
   };
 
   return (
@@ -237,14 +297,21 @@ export default function DashboardPage() {
               <div>
                 <CardTitle className="text-base font-semibold">Stock Reorder & Alert List</CardTitle>
                 <CardDescription className="text-xs">
-                  Products reaching or below configured minimum thresholds
+                  Urgency-sorted by velocity forecast (30d) when available — otherwise by threshold
                 </CardDescription>
               </div>
-              <Link href="/inventory">
-                <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">
-                  View Full Stock →
-                </Button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link href="/reports">
+                  <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">
+                    Intelligence →
+                  </Button>
+                </Link>
+                <Link href="/inventory">
+                  <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">
+                    View Full Stock →
+                  </Button>
+                </Link>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               <Table>
@@ -253,49 +320,73 @@ export default function DashboardPage() {
                     <TableHead>Product</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead className="text-right">Current</TableHead>
-                    <TableHead className="text-right">Min Level</TableHead>
-                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead className="text-right">Min</TableHead>
+                    <TableHead className="text-right">Velocity</TableHead>
+                    <TableHead className="text-center">Urgency</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {loading ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-6 text-sm text-muted-foreground">
+                      <TableCell colSpan={6} className="text-center py-6 text-sm text-muted-foreground">
                         Loading inventory ledger...
                       </TableCell>
                     </TableRow>
                   ) : summary?.low_stock_items?.length ? (
-                    summary.low_stock_items.map((item) => (
-                      <TableRow key={item.product_id}>
-                        <TableCell className="font-medium">
-                          <div>{item.product_name}</div>
-                          {item.sku && <div className="text-xs text-muted-foreground">{item.sku}</div>}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {item.category_name || "General"}
-                        </TableCell>
-                        <TableCell className="text-right font-medium tabular-nums">
-                          {item.current_stock}
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground tabular-nums">
-                          {item.minimum_stock_level}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {item.current_stock <= 0 ? (
-                            <Badge variant="destructive" className="text-[10px] uppercase tracking-wider">
-                              Out of Stock
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30 uppercase tracking-wider">
-                              Low Stock
-                            </Badge>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    (() => {
+                      const enriched = summary.low_stock_items.map((item) => ({
+                        raw: item,
+                        intel: intelligenceMap[item.product_id],
+                      }));
+                      const rank = (s?: string) => {
+                        const order: Record<string, number> = { out_of_stock: 0, critical: 1, low: 2, ok: 3, stable: 4 };
+                        return order[s || ""] ?? 5;
+                      };
+                      enriched.sort((a, b) => {
+                        const ra = a.intel ? rank(a.intel.stock_status) : 2;
+                        const rb = b.intel ? rank(b.intel.stock_status) : 2;
+                        if (ra !== rb) return ra - rb;
+                        const da = a.intel?.days_until_stockout;
+                        const db = b.intel?.days_until_stockout;
+                        if (da === null || da === undefined) return 1;
+                        if (db === null || db === undefined) return -1;
+                        return da - db;
+                      });
+                      return enriched.map(({ raw: item, intel }) => {
+                        const so = stockoutLabel(intel, item);
+                        const vel = intel ? formatVelocity(intel.daily_velocity) : "—";
+                        const status = intel?.stock_status || (item.current_stock <= 0 ? "out_of_stock" : "low");
+                        return (
+                          <TableRow key={item.product_id}>
+                            <TableCell className="font-medium">
+                              <div>{item.product_name}</div>
+                              {item.sku && <div className="text-xs text-muted-foreground tabular-nums">{item.sku}</div>}
+                              {so && <div className="text-[11px] text-muted-foreground tabular-nums">{so}{intel && intel.suggested_order_qty > 0 ? ` · suggest ${intel.suggested_order_qty}` : ""}</div>}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {item.category_name || "General"}
+                            </TableCell>
+                            <TableCell className="text-right font-medium tabular-nums">
+                              {item.current_stock}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground tabular-nums">
+                              {item.minimum_stock_level}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums text-xs">
+                              {vel}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="outline" className={`text-[10px] uppercase tracking-wider ${urgencyBadgeClass(status)}`}>
+                                {status === "out_of_stock" ? "Out" : status === "critical" ? "Critical" : status === "low" ? "Low" : status === "stable" ? "Stable" : "OK"}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      });
+                    })()
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-sm text-muted-foreground">
+                      <TableCell colSpan={6} className="text-center py-8 text-sm text-muted-foreground">
                         All products are above minimum inventory levels.
                       </TableCell>
                     </TableRow>

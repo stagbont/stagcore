@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { HelpButton } from "@/components/help/help-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -140,7 +141,9 @@ export default function PurchasesPage() {
           <h1 className="text-xl font-semibold">Purchases</h1>
           <p className="text-sm text-muted-foreground">Goods receiving — increases stock via ledger</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <div className="flex items-center gap-2">
+          <HelpButton slug="purchases" />
+          <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button onClick={() => { setForm({ supplier_id: "", location_id: "", invoice_reference: "", payment_status: "pending", notes: "" }); setItems([]); }}>New Purchase</Button>
           </DialogTrigger>
@@ -259,6 +262,7 @@ export default function PurchasesPage() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
       {error && <p className="text-sm text-[var(--status-critical)] border border-hairline rounded-md p-3 bg-surface">{error}</p>}
       <Card className="border-hairline">

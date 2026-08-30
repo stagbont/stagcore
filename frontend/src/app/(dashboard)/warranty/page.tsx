@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { HelpButton } from "@/components/help/help-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -95,7 +96,9 @@ export default function WarrantyPage() {
           <h1 className="text-xl font-semibold">Warranty</h1>
           <p className="text-sm text-muted-foreground">Auto-created on device sale · claim flow with validity check</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <div className="flex items-center gap-2">
+          <HelpButton slug="warranty" />
+          <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button>New Claim</Button></DialogTrigger>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>New Warranty Claim</DialogTitle></DialogHeader>
@@ -138,6 +141,7 @@ export default function WarrantyPage() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {error && <p className="text-sm text-[var(--status-critical)] border border-hairline rounded-md p-3 bg-surface">{error}</p>}

@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { HelpButton } from "@/components/help/help-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -87,6 +88,8 @@ export default function CategoriesPage() {
           <h1 className="text-xl font-semibold">Categories</h1>
           <p className="text-sm text-muted-foreground">Group products and set default warranty</p>
         </div>
+        <div className="flex items-center gap-2">
+        <HelpButton slug="categories-warranty" />
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button onClick={openCreate}>New Category</Button>
@@ -112,6 +115,7 @@ export default function CategoriesPage() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
       {error && <p className="text-sm text-[var(--status-critical)] border border-hairline rounded-md p-3 bg-surface">{error}</p>}
       <Card className="border-hairline">

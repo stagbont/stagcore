@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { HelpButton } from "@/components/help/help-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,6 +87,8 @@ export default function LocationsPage() {
           <h1 className="text-xl font-semibold">Locations</h1>
           <p className="text-sm text-muted-foreground">Manage stock locations (warehouses, branches)</p>
         </div>
+        <div className="flex items-center gap-2">
+        <HelpButton slug="transfers-locations" />
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button onClick={openCreate}>New Location</Button>
@@ -111,6 +114,7 @@ export default function LocationsPage() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
       {error && <p className="text-sm text-[var(--status-critical)] border border-hairline rounded-md p-3 bg-surface">{error}</p>}
       <Card className="border-hairline">

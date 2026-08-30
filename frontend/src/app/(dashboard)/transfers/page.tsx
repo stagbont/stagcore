@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { HelpButton } from "@/components/help/help-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -92,9 +93,12 @@ export default function TransfersPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-semibold">Transfers</h1>
-        <p className="text-sm text-muted-foreground">Move stock between locations — atomic TRANSFER_OUT + TRANSFER_IN</p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold">Transfers</h1>
+          <p className="text-sm text-muted-foreground">Move stock between locations — atomic TRANSFER_OUT + TRANSFER_IN</p>
+        </div>
+        <HelpButton slug="transfers-locations" />
       </div>
       {error && <p className="text-sm text-[var(--status-critical)] border border-hairline rounded-md p-3 bg-surface">{error}</p>}
       <Card className="border-hairline">

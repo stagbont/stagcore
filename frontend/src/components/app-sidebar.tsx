@@ -35,6 +35,7 @@ import {
   Wrench,
   BarChart3,
   Building2,
+  HelpCircle,
 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -108,6 +109,7 @@ export function AppSidebar() {
     ...(features.warranty ? [{ href: "/warranty", label: "Warranty", icon: ShieldCheck }] : []),
     ...(features.repairs ? [{ href: "/repairs", label: "Repairs", icon: Wrench }] : []),
     { href: "/reports", label: "Reports", icon: BarChart3 },
+    { href: "/help", label: "Help", icon: HelpCircle },
   ];
 
   const isAdminEmail = (session?.user?.email || "").toLowerCase() === "admin@stagcore.local";

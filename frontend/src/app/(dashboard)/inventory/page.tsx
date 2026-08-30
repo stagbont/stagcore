@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { HelpButton } from "@/components/help/help-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -109,12 +110,13 @@ export default function InventoryPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold">Inventory</h1>
           <p className="text-sm text-muted-foreground">Stock is derived from movements — never edited directly</p>
         </div>
         <div className="flex items-center gap-2">
+          <HelpButton slug="inventory-ledger" />
           <Label className="text-xs">Location filter</Label>
           <Select value={filterLocation} onValueChange={setFilterLocation}>
             <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
@@ -128,7 +130,7 @@ export default function InventoryPage() {
       {error && <p className="text-sm text-[var(--status-critical)] border border-hairline rounded-md p-3 bg-surface">{error}</p>}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="border-hairline lg:col-span-2">
+        <Card data-tour="stock-levels" className="border-hairline lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-base">Stock Levels</CardTitle>
             <CardDescription>Current stock = sum of movements per product</CardDescription>
@@ -174,7 +176,7 @@ export default function InventoryPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-hairline">
+        <Card data-tour="adjust-stock" className="border-hairline">
           <CardHeader>
             <CardTitle className="text-base">Adjust Stock</CardTitle>
             <CardDescription>All changes create a ledger row</CardDescription>
@@ -266,7 +268,7 @@ export default function InventoryPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-hairline">
+        <Card data-tour="recent-movements" className="border-hairline">
           <CardHeader>
             <CardTitle className="text-base">Recent Movements</CardTitle>
             <CardDescription>Last 20 ledger entries</CardDescription>

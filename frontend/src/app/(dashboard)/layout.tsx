@@ -55,6 +55,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     e.preventDefault();
     const code = search.trim();
     if (!code) return;
+    // Help shortcut: "?help" or "help " routes to help search
+    if (/^\?help\b/i.test(code) || /^help\s/i.test(code) || code.toLowerCase() === "help") {
+      const q = code.replace(/^\?help\s*/i, "").replace(/^help\s*/i, "").trim();
+      router.push(q ? `/help?q=${encodeURIComponent(q)}` : "/help");
+      return;
+    }
     const token = (session?.session as unknown as { token?: string } | undefined)?.token;
     if (!token) return;
     setSearching(true);
@@ -106,7 +112,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <span className="text-muted-foreground hidden lg:inline">·</span>
             <span className="text-muted-foreground hidden lg:inline">Welcome back</span>
           </div>
-          <form onSubmit={handleSearch} className="flex flex-1 max-w-md items-center gap-2 sm:ml-auto" role="search" aria-label="Global IMEI/serial search">
+          <form onSubmit={handleSearch} data-tour="global-search" className="flex flex-1 max-w-md items-center gap-2 sm:ml-auto" role="search" aria-label="Global IMEI/serial search">
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input

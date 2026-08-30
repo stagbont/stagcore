@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { HelpButton } from "@/components/help/help-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -255,6 +256,7 @@ export default function ReportsPage() {
             Financial summaries, inventory ledger valuation, product metrics, and supplier analytics
           </p>
         </div>
+        <HelpButton slug="dashboard-reports" />
       </div>
 
       {error && (

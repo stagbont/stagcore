@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { HelpButton } from "@/components/help/help-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -258,10 +259,12 @@ export default function SalesPage() {
           <h1 className="text-xl font-semibold tracking-tight">Sales</h1>
           <p className="text-sm text-muted-foreground">POS — draft → complete (atomic stock / device sale) — tablet 44×44 ready</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => { setForm({ customer_id: "", location_id: "", payment_method: "cash", notes: "" }); setItems([]); }}>New Sale</Button>
-          </DialogTrigger>
+        <div data-tour="new-sale-btn" className="flex items-center gap-2">
+          <HelpButton slug="sales-pos" />
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => { setForm({ customer_id: "", location_id: "", payment_method: "cash", notes: "" }); setItems([]); }}>New Sale</Button>
+            </DialogTrigger>
           <DialogContent className="max-h-[90vh] overflow-y-auto max-w-[min(calc(100%-1rem),56rem)]">
             <DialogHeader>
               <DialogTitle>New Sale</DialogTitle>
@@ -309,7 +312,7 @@ export default function SalesPage() {
                 <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
               </div>
 
-              <div className="border border-hairline rounded-md p-4 flex flex-col gap-3">
+              <div data-tour="sale-items" className="border border-hairline rounded-md p-4 flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                   <Label className="font-medium">Items ({items.length}) — Total: <span className="tabular-nums">{totalFor(items).toFixed(2)}</span></Label>
                   <Select value={draft.mode} onValueChange={(v) => {
@@ -395,9 +398,10 @@ export default function SalesPage() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
       {error && <p role="alert" aria-live="polite" className="text-sm text-[var(--status-critical)] border border-border rounded-md p-3 bg-surface">{error}</p>}
-      <Card className="border-border">
+      <Card data-tour="sales-table" className="border-border">
         <CardHeader>
           <CardTitle className="text-base">All Sales</CardTitle>
           <CardDescription>Draft → Complete (stock) / Cancel (restock)</CardDescription>

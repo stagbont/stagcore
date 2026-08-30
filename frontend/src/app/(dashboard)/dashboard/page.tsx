@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { HelpButton } from "@/components/help/help-button";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -212,7 +213,10 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Executive Dashboard</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight">Executive Dashboard</h1>
+            <HelpButton slug="quick-start" />
+          </div>
           <p className="text-sm text-muted-foreground">
             {business ? `${business.name} (${business.slug}) · Real-Time Operations Overview` : "Loading workspace..."}
           </p>
@@ -238,7 +242,7 @@ export default function DashboardPage() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div data-tour="dashboard-kpis" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {loading ? (
           <>
             <KpiSkeleton />
@@ -298,7 +302,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Grid: Low Stock Alert & Top Selling Products */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div data-tour="dashboard-reorder" className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Low Stock Items (2 cols) */}
         <div className="lg:col-span-2 flex flex-col gap-4">
           <Card className="border-border">

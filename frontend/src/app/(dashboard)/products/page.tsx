@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { HelpButton } from "@/components/help/help-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -110,6 +111,8 @@ export default function ProductsPage() {
           <h1 className="text-xl font-semibold tracking-tight">Products</h1>
           <p className="text-sm text-muted-foreground">Non-serialized inventory (accessories, etc.)</p>
         </div>
+        <div className="flex items-center gap-2">
+        <HelpButton slug="products" />
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button onClick={openCreate}>New Product</Button>
@@ -210,6 +213,7 @@ export default function ProductsPage() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
       {error && <p role="alert" aria-live="polite" className="text-sm text-[var(--status-critical)] border border-border rounded-md p-3 bg-surface">{error}</p>}
       <Card className="border-border">

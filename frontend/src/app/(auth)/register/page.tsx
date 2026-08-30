@@ -61,31 +61,35 @@ export default function RegisterPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-sm border-hairline">
+      <Card className="w-full max-w-md border-border shadow-[var(--shadow-low)]">
         <CardHeader>
-          <CardTitle className="text-xl">Create your account</CardTitle>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold">S</div>
+            <span className="text-sm font-semibold tracking-tight">Stagcore</span>
+          </div>
+          <CardTitle className="text-xl tracking-tight">Create your account</CardTitle>
           <CardDescription>Set up your business in one step</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
             <div className="flex flex-col gap-2">
               <Label htmlFor="name">Your name</Label>
-              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Jane Doe" />
+              <Input id="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Jane Doe" />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com" />
+              <Input id="email" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com" />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="At least 8 characters" />
+              <Input id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="At least 8 characters" />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="business">Business name</Label>
-              <Input id="business" value={businessName} onChange={(e) => setBusinessName(e.target.value)} required placeholder="My Gadget Shop" />
+              <Input id="business" autoComplete="organization" value={businessName} onChange={(e) => setBusinessName(e.target.value)} required placeholder="My Gadget Shop" />
             </div>
-            {error && <p className="text-sm text-[var(--status-critical)]">{error}</p>}
-            <Button type="submit" disabled={loading} className="w-full">
+            {error && <p role="alert" aria-live="polite" className="text-sm text-[var(--status-critical)] border border-critical/20 bg-critical/10 rounded-md p-2">{error}</p>}
+            <Button type="submit" disabled={loading} aria-busy={loading} className="w-full">
               {loading ? "Creating account..." : "Create account"}
             </Button>
           </form>

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 
@@ -105,9 +105,9 @@ export default function ProductsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">Products</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Products</h1>
           <p className="text-sm text-muted-foreground">Non-serialized inventory (accessories, etc.)</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -117,6 +117,7 @@ export default function ProductsPage() {
           <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editing ? "Edit Product" : "New Product"}</DialogTitle>
+              <DialogDescription>Manage accessory and non-serialized items</DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
@@ -210,23 +211,24 @@ export default function ProductsPage() {
           </DialogContent>
         </Dialog>
       </div>
-      {error && <p className="text-sm text-[var(--status-critical)] border border-hairline rounded-md p-3 bg-surface">{error}</p>}
-      <Card className="border-hairline">
+      {error && <p role="alert" aria-live="polite" className="text-sm text-[var(--status-critical)] border border-border rounded-md p-3 bg-surface">{error}</p>}
+      <Card className="border-border">
         <CardHeader>
           <CardTitle className="text-base">All Products</CardTitle>
           <div className="pt-2">
-            <Input placeholder="Search by name, SKU, barcode..." value={q} onChange={(e) => setQ(e.target.value)} className="max-w-sm" />
+            <Input placeholder="Search by name, SKU, barcode..." value={q} onChange={(e) => setQ(e.target.value)} className="max-w-sm" aria-label="Search products" />
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-x-auto">
           <Table>
+            <caption className="sr-only">All products</caption>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>SKU</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead scope="col">Name</TableHead>
+                <TableHead scope="col">SKU</TableHead>
+                <TableHead scope="col">Price</TableHead>
+                <TableHead scope="col">Status</TableHead>
+                <TableHead scope="col" className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

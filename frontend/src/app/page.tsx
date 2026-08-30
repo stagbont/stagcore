@@ -14,5 +14,12 @@ export default function Home() {
     else router.replace("/login");
   }, [isPending, session, router]);
 
-  return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Redirecting...</div>;
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-3">
+        <div className="size-8 animate-spin rounded-full border-2 border-border border-t-primary" aria-hidden />
+        <p className="text-sm text-muted-foreground" aria-live="polite" aria-busy={isPending}>Redirecting…</p>
+      </div>
+    </div>
+  );
 }

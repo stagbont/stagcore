@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { BarcodeScanner } from "@/components/scanner/barcode-scanner";
@@ -253,18 +253,19 @@ export default function SalesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">Sales</h1>
-          <p className="text-sm text-muted-foreground">POS — draft → complete (atomic stock / device sale)</p>
+          <h1 className="text-xl font-semibold tracking-tight">Sales</h1>
+          <p className="text-sm text-muted-foreground">POS — draft → complete (atomic stock / device sale) — tablet 44×44 ready</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button onClick={() => { setForm({ customer_id: "", location_id: "", payment_method: "cash", notes: "" }); setItems([]); }}>New Sale</Button>
           </DialogTrigger>
-          <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+          <DialogContent className="max-h-[90vh] overflow-y-auto max-w-[min(calc(100%-1rem),56rem)]">
             <DialogHeader>
               <DialogTitle>New Sale</DialogTitle>
+              <DialogDescription>Draft a sale then Complete to deduct stock atomically</DialogDescription>
             </DialogHeader>
             <form onSubmit={handleCreate} className="flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-4">
@@ -395,22 +396,24 @@ export default function SalesPage() {
           </DialogContent>
         </Dialog>
       </div>
-      {error && <p className="text-sm text-[var(--status-critical)] border border-hairline rounded-md p-3 bg-surface">{error}</p>}
-      <Card className="border-hairline">
+      {error && <p role="alert" aria-live="polite" className="text-sm text-[var(--status-critical)] border border-border rounded-md p-3 bg-surface">{error}</p>}
+      <Card className="border-border">
         <CardHeader>
           <CardTitle className="text-base">All Sales</CardTitle>
           <CardDescription>Draft → Complete (stock) / Cancel (restock)</CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="overflow-x-auto">
           <Table>
+            <caption className="sr-only">All sales with status and actions</caption>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Payment</TableHead>
-                <TableHead>Items</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead scope="col">Date</TableHead>
+                <TableHead scope="col">Status</TableHead>
+                <TableHead scope="col">Payment</TableHead>
+                <TableHead scope="col">Items</TableHead>
+                <TableHead scope="col">Total</TableHead>
+                <TableHead scope="col" className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -436,14 +439,15 @@ export default function SalesPage() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
       <BarcodeScanner open={scannerOpen} onOpenChange={setScannerOpen} onDetected={handleScan} />
 
       <Dialog open={!!returnOpen} onOpenChange={(v) => !v && setReturnOpen(null)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
-          <DialogHeader><DialogTitle>Return Items</DialogTitle></DialogHeader>
+        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-[min(calc(100%-1rem),56rem)]">
+          <DialogHeader><DialogTitle>Return Items</DialogTitle><DialogDescription>Select items to return and refund</DialogDescription></DialogHeader>
           <div className="flex flex-col gap-4">
             {returnForm.items.map((it, idx) => {
               const si = sales.find((s) => s.id === returnOpen)?.items.find((x) => x.id === it.sale_item_id);

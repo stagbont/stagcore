@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -121,9 +121,9 @@ export default function DevicesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">Devices</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Devices</h1>
           <p className="text-sm text-muted-foreground">Serialized units (IMEI/serial tracked)</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -133,6 +133,7 @@ export default function DevicesPage() {
           <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editing ? "Edit Device" : "New Device"}</DialogTitle>
+              <DialogDescription>Serialized inventory with spec, IMEI and serial</DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
@@ -222,24 +223,25 @@ export default function DevicesPage() {
           </DialogContent>
         </Dialog>
       </div>
-      {error && <p className="text-sm text-[var(--status-critical)] border border-hairline rounded-md p-3 bg-surface">{error}</p>}
-      <Card className="border-hairline">
+      {error && <p role="alert" aria-live="polite" className="text-sm text-[var(--status-critical)] border border-border rounded-md p-3 bg-surface">{error}</p>}
+      <Card className="border-border">
         <CardHeader>
           <CardTitle className="text-base">All Devices</CardTitle>
           <div className="pt-2">
-            <Input placeholder="Search by name, serial, IMEI..." value={q} onChange={(e) => setQ(e.target.value)} className="max-w-sm tabular-nums" />
+            <Input placeholder="Search by name, serial, IMEI..." value={q} onChange={(e) => setQ(e.target.value)} className="max-w-sm tabular-nums" aria-label="Search devices" inputMode="search" />
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-x-auto">
           <Table>
+            <caption className="sr-only">All serialized devices</caption>
             <TableHeader>
               <TableRow>
-                <TableHead>Product</TableHead>
-                <TableHead>Serial</TableHead>
-                <TableHead>IMEI</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead scope="col">Product</TableHead>
+                <TableHead scope="col">Serial</TableHead>
+                <TableHead scope="col">IMEI</TableHead>
+                <TableHead scope="col">Status</TableHead>
+                <TableHead scope="col">Price</TableHead>
+                <TableHead scope="col" className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

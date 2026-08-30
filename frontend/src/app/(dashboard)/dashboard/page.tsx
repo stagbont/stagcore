@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -61,6 +62,20 @@ interface ActivityItem {
   timestamp: string;
 }
 
+function KpiSkeleton() {
+  return (
+    <Card className="border-border bg-surface">
+      <CardHeader className="pb-2">
+        <Skeleton className="h-3 w-24" />
+        <Skeleton className="h-8 w-28 mt-2" />
+      </CardHeader>
+      <CardContent className="pt-0">
+        <Skeleton className="h-3 w-32" />
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function DashboardPage() {
   const { data: session } = useSession();
   const [business, setBusiness] = useState<{ id: string; name: string; slug: string } | null>(null);
@@ -70,72 +85,72 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    async function loadData() {
-      const token = (session?.session as unknown as { token?: string } | undefined)?.token;
-      if (!token) return;
-      try {
-        setLoading(true);
-        setError("");
+  const loadData = useCallback(async () => {
+    const token = (session?.session as unknown as { token?: string } | undefined)?.token;
+    if (!token) return;
+    try {
+      setLoading(true);
+      setError("");
 
-        // 1. Fetch Business
-        const bizRes = await fetch(`${API_URL}/api/v1/business/`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!bizRes.ok) {
-          setError(await bizRes.text());
-          return;
-        }
-        const businesses = await bizRes.json();
-        if (!businesses.length) {
-          setError("No business found");
-          return;
-        }
-        const biz = businesses[0];
-        setBusiness(biz);
-
-        // 2. Fetch Dashboard Summary
-        const [sumRes, actRes] = await Promise.all([
-          fetch(`${API_URL}/api/v1/dashboard/summary?business_id=${biz.id}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          fetch(`${API_URL}/api/v1/dashboard/activity?business_id=${biz.id}&limit=10`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-        ]);
-
-        if (sumRes.ok) {
-          const sumData = await sumRes.json();
-          setSummary(sumData);
-        }
-        if (actRes.ok) {
-          const actData = await actRes.json();
-          setActivities(actData);
-        }
-
-        // Best-effort intelligence enrichment for urgency badges (gated by flag — ignore 403)
-        try {
-          const intelRes = await fetch(
-            `${API_URL}/api/v1/intelligence/overview?business_id=${biz.id}&window_days=30&sort_by=urgency&limit=100`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-          if (intelRes.ok) {
-            const intel = await intelRes.json();
-            const map: Record<string, IntelligenceItem> = {};
-            for (const item of intel.items as IntelligenceItem[]) map[item.product_id] = item;
-            setIntelligenceMap(map);
-          }
-        } catch {
-          // ignore — dashboard still renders without intelligence
-        }
-      } catch (e) {
-        setError(String(e));
-      } finally {
-        setLoading(false);
+      const bizRes = await fetch(`${API_URL}/api/v1/business/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!bizRes.ok) {
+        setError(await bizRes.text());
+        return;
       }
+      const businesses = await bizRes.json();
+      if (!businesses.length) {
+        setError("No business found — create one via registration.");
+        return;
+      }
+      const biz = businesses[0];
+      setBusiness(biz);
+
+      const [sumRes, actRes] = await Promise.all([
+        fetch(`${API_URL}/api/v1/dashboard/summary?business_id=${biz.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${API_URL}/api/v1/dashboard/activity?business_id=${biz.id}&limit=10`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+
+      if (sumRes.ok) {
+        const sumData = await sumRes.json();
+        setSummary(sumData);
+      } else {
+        setError(await sumRes.text());
+      }
+      if (actRes.ok) {
+        const actData = await actRes.json();
+        setActivities(actData);
+      }
+
+      try {
+        const intelRes = await fetch(
+          `${API_URL}/api/v1/intelligence/overview?business_id=${biz.id}&window_days=30&sort_by=urgency&limit=100`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (intelRes.ok) {
+          const intel = await intelRes.json();
+          const map: Record<string, IntelligenceItem> = {};
+          for (const item of intel.items as IntelligenceItem[]) map[item.product_id] = item;
+          setIntelligenceMap(map);
+        }
+      } catch {
+        // ignore — dashboard still renders without intelligence
+      }
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
     }
-    loadData();
   }, [session]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const formatCurrency = (val?: string | number) => {
     if (val === undefined || val === null) return "$0.00";
@@ -145,7 +160,8 @@ export default function DashboardPage() {
 
   const formatDate = (iso: string) => {
     try {
-      return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
+      const d = new Date(iso);
+      return d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: true });
     } catch {
       return iso;
     }
@@ -158,7 +174,7 @@ export default function DashboardPage() {
     return `${n.toFixed(2)}/d`;
   };
 
-  const stockoutLabel = (item: IntelligenceItem | undefined, _fallback: LowStockItem) => {
+  const stockoutLabel = (item: IntelligenceItem | undefined) => {
     if (!item) return null;
     if (item.stock_status === "stable") return "Stable · no recent sales";
     if (item.days_until_stockout === null || item.days_until_stockout === undefined) return null;
@@ -174,18 +190,27 @@ export default function DashboardPage() {
     return `${item.days_until_stockout}d`;
   };
 
-  const urgencyBadgeClass = (status?: string) => {
-    if (status === "out_of_stock") return "bg-[var(--status-critical)]/10 text-[var(--status-critical)] border-[var(--status-critical)]/20";
-    if (status === "critical") return "bg-[var(--status-critical)]/10 text-[var(--status-critical)] border-[var(--status-critical)]/20";
-    if (status === "low") return "text-amber-600 border-amber-500/30";
-    if (status === "stable") return "bg-muted text-muted-foreground";
-    return "bg-emerald-500/10 text-emerald-700 border-emerald-500/20";
+  const urgencyVariant = (status?: string): "critical" | "warning" | "success" | "secondary" | "outline" => {
+    if (status === "out_of_stock" || status === "critical") return "critical";
+    if (status === "low") return "warning";
+    if (status === "stable") return "secondary";
+    if (status === "ok") return "success";
+    return "outline";
+  };
+
+  const urgencyLabel = (status?: string) => {
+    if (status === "out_of_stock") return "Out";
+    if (status === "critical") return "Critical";
+    if (status === "low") return "Low";
+    if (status === "stable") return "Stable";
+    if (status === "ok") return "OK";
+    return status || "—";
   };
 
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Executive Dashboard</h1>
           <p className="text-sm text-muted-foreground">
@@ -194,144 +219,128 @@ export default function DashboardPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link href="/sales">
-            <Button size="sm" className="bg-primary text-primary-foreground font-medium">
-              + New POS Sale
-            </Button>
+            <Button className="min-h-11 font-medium">+ New POS Sale</Button>
           </Link>
           <Link href="/purchases">
-            <Button size="sm" variant="outline" className="border-hairline">
-              Receive Inventory
-            </Button>
+            <Button variant="outline" className="min-h-11">Receive Inventory</Button>
           </Link>
           <Link href="/reports">
-            <Button size="sm" variant="outline" className="border-hairline">
-              Detailed Reports
-            </Button>
+            <Button variant="outline" className="min-h-11">Detailed Reports</Button>
           </Link>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-[var(--status-critical)]/30 bg-[var(--status-critical)]/10 p-4 text-sm text-[var(--status-critical)]">
-          {error}
+        <div role="alert" aria-live="polite" className="flex flex-col gap-2 rounded-lg border border-critical/30 bg-critical/10 p-4 text-sm text-critical sm:flex-row sm:items-center sm:justify-between">
+          <span>{error}</span>
+          <Button variant="outline" size="sm" onClick={loadData} className="shrink-0 border-critical/30">Retry</Button>
         </div>
       )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-hairline bg-surface">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-              Today&apos;s Sales Revenue
-            </CardDescription>
-            <CardTitle className="text-2xl font-semibold tabular-nums">
-              {loading ? "..." : formatCurrency(summary?.today_sales_total)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <p className="text-xs text-muted-foreground">
-              {summary ? `${summary.today_sales_count} completed orders today` : "—"}
-            </p>
-          </CardContent>
-        </Card>
+        {loading ? (
+          <>
+            <KpiSkeleton />
+            <KpiSkeleton />
+            <KpiSkeleton />
+            <KpiSkeleton />
+          </>
+        ) : (
+          <>
+            <Card className="border-border bg-surface">
+              <CardHeader className="pb-2">
+                <CardDescription className="text-xs uppercase tracking-wider font-medium">Today&apos;s Sales Revenue</CardDescription>
+                <CardTitle className="text-2xl font-bold tabular-nums">{formatCurrency(summary?.today_sales_total)}</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <p className="text-xs text-muted-foreground">{summary ? `${summary.today_sales_count} completed orders today` : "—"}</p>
+              </CardContent>
+            </Card>
 
-        <Card className="border-hairline bg-surface">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-              Today&apos;s Gross Profit
-            </CardDescription>
-            <CardTitle className="text-2xl font-semibold tabular-nums text-foreground">
-              {loading ? "..." : formatCurrency(summary?.today_gross_profit)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <p className="text-xs text-muted-foreground">Derived post COGS deduction</p>
-          </CardContent>
-        </Card>
+            <Card className="border-border bg-surface">
+              <CardHeader className="pb-2">
+                <CardDescription className="text-xs uppercase tracking-wider font-medium">Today&apos;s Gross Profit</CardDescription>
+                <CardTitle className="text-2xl font-bold tabular-nums">{formatCurrency(summary?.today_gross_profit)}</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <p className="text-xs text-muted-foreground">Derived post COGS deduction</p>
+              </CardContent>
+            </Card>
 
-        <Card className="border-hairline bg-surface">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-              Total Inventory Valuation
-            </CardDescription>
-            <CardTitle className="text-2xl font-semibold tabular-nums">
-              {loading ? "..." : formatCurrency(summary?.total_inventory_value)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <p className="text-xs text-muted-foreground">
-              {summary ? `${summary.total_products_count} active items & devices` : "—"}
-            </p>
-          </CardContent>
-        </Card>
+            <Card className="border-border bg-surface">
+              <CardHeader className="pb-2">
+                <CardDescription className="text-xs uppercase tracking-wider font-medium">Total Inventory Valuation</CardDescription>
+                <CardTitle className="text-2xl font-bold tabular-nums">{formatCurrency(summary?.total_inventory_value)}</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <p className="text-xs text-muted-foreground">{summary ? `${summary.total_products_count} active items & devices` : "—"}</p>
+              </CardContent>
+            </Card>
 
-        <Card className="border-hairline bg-surface">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-              Low Stock Attention
-            </CardDescription>
-            <CardTitle className="text-2xl font-semibold tabular-nums">
-              {loading ? "..." : (summary?.low_stock_count ?? 0) + (summary?.out_of_stock_count ?? 0)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {summary && summary.low_stock_count + summary.out_of_stock_count > 0 ? (
-              <Badge variant="destructive" className="text-xs rounded-full font-normal">
-                {summary.out_of_stock_count} Out of stock · {summary.low_stock_count} Low
-              </Badge>
-            ) : (
-              <Badge variant="secondary" className="text-xs rounded-full font-normal">
-                Inventory Healthy
-              </Badge>
-            )}
-          </CardContent>
-        </Card>
+            <Card className="border-border bg-surface">
+              <CardHeader className="pb-2">
+                <CardDescription className="text-xs uppercase tracking-wider font-medium">Low Stock Attention</CardDescription>
+                <CardTitle className="text-2xl font-bold tabular-nums">{(summary?.low_stock_count ?? 0) + (summary?.out_of_stock_count ?? 0)}</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {summary && summary.low_stock_count + summary.out_of_stock_count > 0 ? (
+                  <Badge variant="critical" className="text-xs font-normal">
+                    {summary.out_of_stock_count} Out of stock · {summary.low_stock_count} Low
+                  </Badge>
+                ) : (
+                  <Badge variant="success" className="text-xs font-normal">Inventory Healthy</Badge>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
 
       {/* Grid: Low Stock Alert & Top Selling Products */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Low Stock Items (2 cols) */}
         <div className="lg:col-span-2 flex flex-col gap-4">
-          <Card className="border-hairline">
-            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+          <Card className="border-border">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2">
               <div>
                 <CardTitle className="text-base font-semibold">Stock Reorder & Alert List</CardTitle>
-                <CardDescription className="text-xs">
-                  Urgency-sorted by velocity forecast (30d) when available — otherwise by threshold
-                </CardDescription>
+                <CardDescription className="text-xs">Urgency-sorted by velocity forecast (30d) when available — otherwise by threshold</CardDescription>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 shrink-0">
                 <Link href="/reports">
-                  <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">
-                    Intelligence →
-                  </Button>
+                  <Button variant="ghost" size="sm" className="text-xs">Intelligence →</Button>
                 </Link>
                 <Link href="/inventory">
-                  <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">
-                    View Full Stock →
-                  </Button>
+                  <Button variant="ghost" size="sm" className="text-xs">Full Stock →</Button>
                 </Link>
               </div>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
+                <caption className="sr-only">Low stock items sorted by urgency</caption>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="text-right">Current</TableHead>
-                    <TableHead className="text-right">Min</TableHead>
-                    <TableHead className="text-right">Velocity</TableHead>
-                    <TableHead className="text-center">Urgency</TableHead>
+                    <TableHead scope="col">Product</TableHead>
+                    <TableHead scope="col">Category</TableHead>
+                    <TableHead scope="col" className="text-right">Current</TableHead>
+                    <TableHead scope="col" className="text-right">Min</TableHead>
+                    <TableHead scope="col" className="text-right">Velocity</TableHead>
+                    <TableHead scope="col" className="text-center">Urgency</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {loading ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-6 text-sm text-muted-foreground">
-                        Loading inventory ledger...
-                      </TableCell>
-                    </TableRow>
+                    Array.from({ length: 3 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-8 ml-auto" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-8 ml-auto" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
+                        <TableCell><Skeleton className="h-5 w-16 mx-auto" /></TableCell>
+                      </TableRow>
+                    ))
                   ) : summary?.low_stock_items?.length ? (
                     (() => {
                       const enriched = summary.low_stock_items.map((item) => ({
@@ -353,7 +362,7 @@ export default function DashboardPage() {
                         return da - db;
                       });
                       return enriched.map(({ raw: item, intel }) => {
-                        const so = stockoutLabel(intel, item);
+                        const so = stockoutLabel(intel);
                         const vel = intel ? formatVelocity(intel.daily_velocity) : "—";
                         const status = intel?.stock_status || (item.current_stock <= 0 ? "out_of_stock" : "low");
                         return (
@@ -363,22 +372,12 @@ export default function DashboardPage() {
                               {item.sku && <div className="text-xs text-muted-foreground tabular-nums">{item.sku}</div>}
                               {so && <div className="text-[11px] text-muted-foreground tabular-nums">{so}{intel && intel.suggested_order_qty > 0 ? ` · suggest ${intel.suggested_order_qty}` : ""}</div>}
                             </TableCell>
-                            <TableCell className="text-muted-foreground text-sm">
-                              {item.category_name || "General"}
-                            </TableCell>
-                            <TableCell className="text-right font-medium tabular-nums">
-                              {item.current_stock}
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground tabular-nums">
-                              {item.minimum_stock_level}
-                            </TableCell>
-                            <TableCell className="text-right tabular-nums text-xs">
-                              {vel}
-                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">{item.category_name || "General"}</TableCell>
+                            <TableCell className="text-right font-medium tabular-nums">{item.current_stock}</TableCell>
+                            <TableCell className="text-right text-muted-foreground tabular-nums">{item.minimum_stock_level}</TableCell>
+                            <TableCell className="text-right tabular-nums text-xs">{vel}</TableCell>
                             <TableCell className="text-center">
-                              <Badge variant="outline" className={`text-[10px] uppercase tracking-wider ${urgencyBadgeClass(status)}`}>
-                                {status === "out_of_stock" ? "Out" : status === "critical" ? "Critical" : status === "low" ? "Low" : status === "stable" ? "Stable" : "OK"}
-                              </Badge>
+                              <Badge variant={urgencyVariant(status)} className="text-[10px] uppercase tracking-wider">{urgencyLabel(status)}</Badge>
                             </TableCell>
                           </TableRow>
                         );
@@ -397,27 +396,30 @@ export default function DashboardPage() {
           </Card>
 
           {/* Top Selling Products */}
-          <Card className="border-hairline">
+          <Card className="border-border">
             <CardHeader className="pb-3">
               <CardTitle className="text-base font-semibold">Today&apos;s Top Performing Products</CardTitle>
               <CardDescription className="text-xs">Highest unit volume sold today</CardDescription>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
+                <caption className="sr-only">Top selling products today</caption>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead className="text-right">Units Sold</TableHead>
-                    <TableHead className="text-right">Revenue</TableHead>
+                    <TableHead scope="col">Product</TableHead>
+                    <TableHead scope="col" className="text-right">Units Sold</TableHead>
+                    <TableHead scope="col" className="text-right">Revenue</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {loading ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center py-4 text-sm text-muted-foreground">
-                        Loading...
-                      </TableCell>
-                    </TableRow>
+                    Array.from({ length: 2 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-8 ml-auto" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                      </TableRow>
+                    ))
                   ) : summary?.top_selling_products?.length ? (
                     summary.top_selling_products.map((p) => (
                       <TableRow key={p.product_id}>
@@ -426,16 +428,12 @@ export default function DashboardPage() {
                           {p.sku && <span className="ml-2 text-xs text-muted-foreground">({p.sku})</span>}
                         </TableCell>
                         <TableCell className="text-right font-medium tabular-nums">{p.units_sold}</TableCell>
-                        <TableCell className="text-right tabular-nums text-foreground">
-                          {formatCurrency(p.total_revenue)}
-                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-foreground">{formatCurrency(p.total_revenue)}</TableCell>
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={3} className="text-center py-6 text-sm text-muted-foreground">
-                        No sales recorded yet today.
-                      </TableCell>
+                      <TableCell colSpan={3} className="text-center py-6 text-sm text-muted-foreground">No sales recorded yet today.</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -446,32 +444,40 @@ export default function DashboardPage() {
 
         {/* Live Activity Timeline (1 col) */}
         <div className="flex flex-col gap-4">
-          <Card className="border-hairline flex-1 flex flex-col">
+          <Card className="border-border flex-1 flex flex-col">
             <CardHeader className="pb-3">
               <CardTitle className="text-base font-semibold">Operational Activity Feed</CardTitle>
               <CardDescription className="text-xs">Chronological timeline of transactions & movements</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-y-auto">
               {loading ? (
-                <p className="text-sm text-muted-foreground">Loading activity stream...</p>
+                <div className="flex flex-col gap-3">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="flex gap-3">
+                      <Skeleton className="size-2 rounded-full mt-1 shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-3 w-24" />
+                        <Skeleton className="h-2 w-full" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ) : activities.length ? (
                 <div className="flex flex-col gap-4">
                   {activities.map((act) => {
                     const isSale = act.activity_type === "sale";
                     const isPur = act.activity_type === "purchase";
                     return (
-                      <div key={act.id} className="flex items-start gap-3 text-sm pb-3 border-b border-hairline last:border-b-0">
-                        <div
-                          className={`mt-0.5 size-2 rounded-full shrink-0 ${
-                            isSale ? "bg-emerald-500" : isPur ? "bg-blue-500" : "bg-muted-foreground"
-                          }`}
+                      <div key={act.id} className="flex items-start gap-3 text-sm pb-3 border-b border-border last:border-b-0">
+                        <span
+                          aria-hidden
+                          className={`mt-1 size-2 rounded-full shrink-0 ${isSale ? "bg-[var(--status-success)]" : isPur ? "bg-[var(--action-primary)]" : "bg-muted-foreground"}`}
                         />
+                        <span className="sr-only">{isSale ? "Sale" : isPur ? "Purchase" : "Movement"}</span>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-medium text-xs truncate">{act.title}</span>
-                            <span className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
-                              {formatDate(act.timestamp)}
-                            </span>
+                            <span className="text-[11px] text-muted-foreground shrink-0 tabular-nums">{formatDate(act.timestamp)}</span>
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">{act.description}</p>
                         </div>

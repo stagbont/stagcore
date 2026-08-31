@@ -6,12 +6,17 @@ import { useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { HelpButton } from "@/components/help/help-button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { PageHeader, PageHeaderActions, PageHeaderContent, PageHeaderDescription, PageHeaderTitle } from "@/components/page-header";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { EmptyState } from "@/components/empty-state";
+import { Field } from "@/components/field";
+import { formatCurrency, formatDate } from "@/lib/format";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 type PurchaseItem = { id: string; product_id: string | null; quantity: number; unit_cost: string; serial_number: string | null; imei: string | null; product_name: string | null };
@@ -19,6 +24,71 @@ type Purchase = { id: string; invoice_reference: string | null; purchase_date: s
 type Product = { id: string; name: string; sku: string | null };
 type Supplier = { id: string; name: string };
 type Location = { id: string; name: string };
+
+type DraftState = { mode: "product" | "device"; product_id: string; quantity: string; unit_cost: string; serial_number: string; imei: string; product_name: string };
+
+function PurchaseProductFields({
+  draft,
+  setDraft,
+  products,
+  errors,
+}: {
+  draft: DraftState;
+  setDraft: React.Dispatch<React.SetStateAction<DraftState>>;
+  products: Product[];
+  errors: { product?: string; quantity?: string };
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <Field label="Product" htmlFor="purchase-product" error={errors.product} required>
+        <Select value={draft.product_id || "none"} onValueChange={(v) => setDraft((prev) => ({ ...prev, product_id: v === "none" ? "" : v }))}>
+          <SelectTrigger id="purchase-product"><SelectValue placeholder="Select product…" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Select product…</SelectItem>
+            {products.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Qty" htmlFor="purchase-qty" error={errors.quantity} hint="Units" required>
+        <Input id="purchase-qty" type="number" inputMode="numeric" value={draft.quantity} onChange={(e) => setDraft((prev) => ({ ...prev, quantity: e.target.value }))} min={1} step={1} placeholder="1…" autoComplete="off" aria-invalid={errors.quantity ? true : undefined} />
+      </Field>
+      <Field label="Unit cost" htmlFor="purchase-cost" hint="Per unit">
+        <Input id="purchase-cost" type="number" inputMode="decimal" step="0.01" value={draft.unit_cost} onChange={(e) => setDraft((prev) => ({ ...prev, unit_cost: e.target.value }))} placeholder="0.00…" autoComplete="off" />
+      </Field>
+    </div>
+  );
+}
+
+function PurchaseDeviceFields({
+  draft,
+  setDraft,
+  errors,
+}: {
+  draft: DraftState;
+  setDraft: React.Dispatch<React.SetStateAction<DraftState>>;
+  errors: { product_name?: string; serial?: string };
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <Field label="Product name" htmlFor="purchase-device-name" error={errors.product_name} required>
+          <Input id="purchase-device-name" value={draft.product_name} onChange={(e) => setDraft((prev) => ({ ...prev, product_name: e.target.value }))} placeholder="e.g. iPhone 14…" autoComplete="off" aria-invalid={errors.product_name ? true : undefined} />
+        </Field>
+        <Field label="Serial" htmlFor="purchase-serial" error={errors.serial} required>
+          <Input id="purchase-serial" value={draft.serial_number} onChange={(e) => setDraft((prev) => ({ ...prev, serial_number: e.target.value }))} placeholder="Serial…" autoComplete="off" aria-invalid={errors.serial ? true : undefined} />
+        </Field>
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <Field label="IMEI" htmlFor="purchase-imei" hint="Optional">
+          <Input id="purchase-imei" value={draft.imei} onChange={(e) => setDraft((prev) => ({ ...prev, imei: e.target.value }))} placeholder="IMEI…" inputMode="numeric" autoComplete="off" />
+        </Field>
+        <Field label="Unit cost" htmlFor="purchase-device-cost" hint="Per device">
+          <Input id="purchase-device-cost" type="number" inputMode="decimal" step="0.01" value={draft.unit_cost} onChange={(e) => setDraft((prev) => ({ ...prev, unit_cost: e.target.value }))} placeholder="0.00…" autoComplete="off" />
+        </Field>
+      </div>
+    </div>
+  );
+}
 
 export default function PurchasesPage() {
   const { data: session } = useSession();
@@ -31,7 +101,13 @@ export default function PurchasesPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ supplier_id: "", location_id: "", invoice_reference: "", payment_status: "pending", notes: "" });
   const [items, setItems] = useState<{ product_id: string; quantity: string; unit_cost: string; serial_number: string; imei: string; product_name: string; mode: "product" | "device" }[]>([]);
-  const [draft, setDraft] = useState({ mode: "product" as "product" | "device", product_id: "", quantity: "1", unit_cost: "0.00", serial_number: "", imei: "", product_name: "" });
+  const [draft, setDraft] = useState<DraftState>({ mode: "product", product_id: "", quantity: "1", unit_cost: "0.00", serial_number: "", imei: "", product_name: "" });
+  const [draftErrors, setDraftErrors] = useState<{ product?: string; quantity?: string; product_name?: string; serial?: string }>({});
+  const [itemsError, setItemsError] = useState<string | undefined>(undefined);
+  const [confirmReceive, setConfirmReceive] = useState<string | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
 
   async function load() {
     if (!token) return;
@@ -59,26 +135,40 @@ export default function PurchasesPage() {
   }, [token]);
 
   function addItem() {
+    setDraftErrors({});
+    setItemsError(undefined);
+    setError("");
     if (draft.mode === "product") {
-      if (!draft.product_id || !draft.quantity) {
-        setError("Select product and quantity");
+      const errs: { product?: string; quantity?: string } = {};
+      if (!draft.product_id) errs.product = "Select a product";
+      const qty = parseInt(draft.quantity);
+      if (!draft.quantity || Number.isNaN(qty) || qty <= 0) errs.quantity = "Enter quantity > 0";
+      if (Object.keys(errs).length) {
+        setDraftErrors(errs);
+        setError(errs.product || errs.quantity || "Fix the highlighted fields");
         return;
       }
       setItems([...items, { product_id: draft.product_id, quantity: draft.quantity, unit_cost: draft.unit_cost || "0.00", serial_number: "", imei: "", product_name: "", mode: "product" }]);
     } else {
-      if (!draft.product_name || !draft.serial_number) {
-        setError("Device requires product name and serial");
+      const errs: { product_name?: string; serial?: string } = {};
+      if (!draft.product_name.trim()) errs.product_name = "Product name required";
+      if (!draft.serial_number.trim()) errs.serial = "Serial required";
+      if (Object.keys(errs).length) {
+        setDraftErrors(errs);
+        setError(errs.product_name || errs.serial || "Fix the highlighted fields");
         return;
       }
-      setItems([...items, { product_id: "", quantity: "1", unit_cost: draft.unit_cost || "0.00", serial_number: draft.serial_number, imei: draft.imei, product_name: draft.product_name, mode: "device" }]);
+      setItems([...items, { product_id: "", quantity: "1", unit_cost: draft.unit_cost || "0.00", serial_number: draft.serial_number.trim(), imei: draft.imei.trim() || "", product_name: draft.product_name.trim(), mode: "device" }]);
     }
-    setDraft({ mode: draft.mode, product_id: "", quantity: "1", unit_cost: "0.00", serial_number: "", imei: "", product_name: "" });
+    setDraft((prev) => ({ mode: prev.mode, product_id: "", quantity: "1", unit_cost: "0.00", serial_number: "", imei: "", product_name: "" }));
     setError("");
   }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    setItemsError(undefined);
     if (!items.length) {
+      setItemsError("Add at least one item");
       setError("Add at least one item");
       return;
     }
@@ -102,210 +192,245 @@ export default function PurchasesPage() {
     setOpen(false);
     setForm({ supplier_id: "", location_id: "", invoice_reference: "", payment_status: "pending", notes: "" });
     setItems([]);
+    setDraftErrors({});
+    setItemsError(undefined);
     load();
   }
 
-  async function handleReceive(id: string) {
-    if (!confirm("Receive this purchase? This will increase stock and create devices.")) return;
-    const res = await fetch(`${API_URL}/api/v1/purchases/${id}/receive`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) {
-      setError(await res.text());
-      return;
+  async function doReceive(id: string) {
+    setActionBusy(id);
+    try {
+      const res = await fetch(`${API_URL}/api/v1/purchases/${id}/receive`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) { setError(await res.text()); return; }
+      await load();
+    } finally {
+      setActionBusy(null);
+      setConfirmReceive(null);
     }
-    load();
   }
 
-  async function handleCancel(id: string) {
-    const res = await fetch(`${API_URL}/api/v1/purchases/${id}/cancel`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) {
-      setError(await res.text());
-      return;
+  async function doCancel(id: string) {
+    setActionBusy(id);
+    try {
+      const res = await fetch(`${API_URL}/api/v1/purchases/${id}/cancel`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) { setError(await res.text()); return; }
+      await load();
+    } finally {
+      setActionBusy(null);
+      setConfirmCancel(null);
     }
-    load();
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Delete this draft purchase?")) return;
-    const res = await fetch(`${API_URL}/api/v1/purchases/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) {
-      setError(await res.text());
-      return;
+  async function doDelete(id: string) {
+    setActionBusy(id);
+    try {
+      const res = await fetch(`${API_URL}/api/v1/purchases/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) { setError(await res.text()); return; }
+      await load();
+    } finally {
+      setActionBusy(null);
+      setConfirmDelete(null);
     }
-    load();
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">Purchases</h1>
-          <p className="text-sm text-muted-foreground">Goods receiving — increases stock via ledger</p>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader>
+        <PageHeaderContent>
+          <PageHeaderTitle>Purchases</PageHeaderTitle>
+          <PageHeaderDescription>Goods receiving — increases stock via ledger</PageHeaderDescription>
+        </PageHeaderContent>
+        <PageHeaderActions>
           <HelpButton slug="purchases" />
-          <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => { setForm({ supplier_id: "", location_id: "", invoice_reference: "", payment_status: "pending", notes: "" }); setItems([]); }}>New Purchase</Button>
-          </DialogTrigger>
-          <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>New Purchase</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleCreate} className="flex flex-col gap-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-2">
-                  <Label>Supplier (optional)</Label>
-                  <Select value={form.supplier_id || "none"} onValueChange={(v) => setForm({ ...form, supplier_id: v === "none" ? "" : v })}>
-                    <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {suppliers.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <Label>Location (optional)</Label>
-                  <Select value={form.location_id || "none"} onValueChange={(v) => setForm({ ...form, location_id: v === "none" ? "" : v })}>
-                    <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {locations.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-2">
-                  <Label>Invoice ref</Label>
-                  <Input value={form.invoice_reference} onChange={(e) => setForm({ ...form, invoice_reference: e.target.value })} placeholder="INV-001" />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <Label>Payment status</Label>
-                  <Select value={form.payment_status} onValueChange={(v) => setForm({ ...form, payment_status: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="paid">Paid</SelectItem>
-                      <SelectItem value="partial">Partial</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label>Notes</Label>
-                <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-              </div>
-
-              <div className="border border-hairline rounded-md p-4 flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <Label className="font-medium">Items ({items.length})</Label>
-                  <Select value={draft.mode} onValueChange={(v) => setDraft({ ...draft, mode: v as "product" | "device" })}>
-                    <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="product">Product</SelectItem>
-                      <SelectItem value="device">Device</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {draft.mode === "product" ? (
-                  <div className="grid grid-cols-3 gap-2">
-                    <Select value={draft.product_id || "none"} onValueChange={(v) => setDraft({ ...draft, product_id: v === "none" ? "" : v })}>
-                      <SelectTrigger><SelectValue placeholder="Product" /></SelectTrigger>
+          <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setDraftErrors({}); setItemsError(undefined); } }}>
+            <DialogTrigger asChild>
+              <Button onClick={() => { setForm({ supplier_id: "", location_id: "", invoice_reference: "", payment_status: "pending", notes: "" }); setItems([]); setDraftErrors({}); setItemsError(undefined); setError(""); }} className="min-h-11">New Purchase</Button>
+            </DialogTrigger>
+            <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>New Purchase</DialogTitle>
+                <DialogDescription>Draft a purchase — Receive will increase stock and create devices via the ledger</DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleCreate} className="flex flex-col gap-4" noValidate>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Field label="Supplier" htmlFor="purchase-supplier" hint="Optional">
+                    <Select value={form.supplier_id || "none"} onValueChange={(v) => setForm({ ...form, supplier_id: v === "none" ? "" : v })}>
+                      <SelectTrigger id="purchase-supplier"><SelectValue placeholder="None…" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">Select</SelectItem>
-                        {products.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                        <SelectItem value="none">None</SelectItem>
+                        {suppliers.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <Input type="number" value={draft.quantity} onChange={(e) => setDraft({ ...draft, quantity: e.target.value })} min="1" placeholder="Qty" />
-                    <Input type="number" step="0.01" value={draft.unit_cost} onChange={(e) => setDraft({ ...draft, unit_cost: e.target.value })} placeholder="Cost" />
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input value={draft.product_name} onChange={(e) => setDraft({ ...draft, product_name: e.target.value })} placeholder="Product name (e.g. iPhone 14)" />
-                      <Input value={draft.serial_number} onChange={(e) => setDraft({ ...draft, serial_number: e.target.value })} placeholder="Serial *" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input value={draft.imei} onChange={(e) => setDraft({ ...draft, imei: e.target.value })} placeholder="IMEI (optional)" />
-                      <Input type="number" step="0.01" value={draft.unit_cost} onChange={(e) => setDraft({ ...draft, unit_cost: e.target.value })} placeholder="Cost" />
-                    </div>
-                  </div>
-                )}
-                <Button type="button" variant="outline" onClick={addItem}>Add Item</Button>
-                {items.length > 0 && (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Detail</TableHead>
-                        <TableHead>Qty</TableHead>
-                        <TableHead>Cost</TableHead>
-                        <TableHead></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {items.map((it, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell><Badge variant="secondary" className="rounded-full">{it.mode}</Badge></TableCell>
-                          <TableCell className="text-xs">{it.mode === "product" ? products.find((p) => p.id === it.product_id)?.name || it.product_id : `${it.product_name} ${it.serial_number}`}</TableCell>
-                          <TableCell className="tabular-nums">{it.quantity}</TableCell>
-                          <TableCell className="tabular-nums">{it.unit_cost}</TableCell>
-                          <TableCell><Button type="button" variant="ghost" size="sm" onClick={() => setItems(items.filter((_, i) => i !== idx))}>Remove</Button></TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </div>
+                  </Field>
+                  <Field label="Location" htmlFor="purchase-location" hint="Optional">
+                    <Select value={form.location_id || "none"} onValueChange={(v) => setForm({ ...form, location_id: v === "none" ? "" : v })}>
+                      <SelectTrigger id="purchase-location"><SelectValue placeholder="None…" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {locations.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Field label="Invoice ref" htmlFor="purchase-invoice" hint="Optional">
+                    <Input id="purchase-invoice" value={form.invoice_reference} onChange={(e) => setForm({ ...form, invoice_reference: e.target.value })} placeholder="INV-001…" autoComplete="off" />
+                  </Field>
+                  <Field label="Payment status" htmlFor="purchase-payment">
+                    <Select value={form.payment_status} onValueChange={(v) => setForm({ ...form, payment_status: v })}>
+                      <SelectTrigger id="purchase-payment"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="paid">Paid</SelectItem>
+                        <SelectItem value="partial">Partial</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </div>
+                <Field label="Notes" htmlFor="purchase-notes" hint="Optional">
+                  <Input id="purchase-notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Notes…" autoComplete="off" />
+                </Field>
 
-              <Button type="submit">Create Draft</Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-        </div>
-      </div>
-      {error && <p className="text-sm text-[var(--status-critical)] border border-hairline rounded-md p-3 bg-surface">{error}</p>}
+                <div className="rounded-md border border-hairline p-4 flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm font-medium">Items ({items.length})</span>
+                    <Field label="Item type" htmlFor="purchase-draft-mode" className="w-36">
+                      <Select value={draft.mode} onValueChange={(v) => { setDraftErrors({}); setDraft({ ...draft, mode: v as "product" | "device" }); }}>
+                        <SelectTrigger id="purchase-draft-mode" aria-label="Item type"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="product">Product</SelectItem>
+                          <SelectItem value="device">Device</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
+
+                  {draft.mode === "product" ? (
+                    <PurchaseProductFields draft={draft} setDraft={setDraft} products={products} errors={{ product: draftErrors.product, quantity: draftErrors.quantity }} />
+                  ) : (
+                    <PurchaseDeviceFields draft={draft} setDraft={setDraft} errors={{ product_name: draftErrors.product_name, serial: draftErrors.serial }} />
+                  )}
+                  <Button type="button" variant="outline" onClick={addItem} className="min-h-11">Add Item</Button>
+                  {itemsError ? <p role="alert" className="text-xs text-[var(--status-critical)]">{itemsError}</p> : null}
+                  {items.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <caption className="sr-only">Purchase cart items</caption>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead scope="col">Type</TableHead>
+                            <TableHead scope="col">Detail</TableHead>
+                            <TableHead scope="col" className="text-right">Qty</TableHead>
+                            <TableHead scope="col" className="text-right">Cost</TableHead>
+                            <TableHead scope="col"><span className="sr-only">Remove</span></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {items.map((it, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell><Badge variant="secondary" className="rounded-full">{it.mode}</Badge></TableCell>
+                              <TableCell className="text-xs max-w-[200px] truncate">{it.mode === "product" ? products.find((p) => p.id === it.product_id)?.name || it.product_id.slice(0, 8) : `${it.product_name} · ${it.serial_number}`}</TableCell>
+                              <TableCell className="text-right tabular-nums">{it.quantity}</TableCell>
+                              <TableCell className="text-right tabular-nums">{formatCurrency(it.unit_cost)}</TableCell>
+                              <TableCell className="text-right"><Button type="button" variant="ghost" size="sm" onClick={() => setItems(items.filter((_, i) => i !== idx))} className="min-h-9">Remove</Button></TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : (
+                    <div className="rounded-md border border-dashed border-border bg-surface px-4 py-6 text-center">
+                      <p className="text-sm text-muted-foreground">No items yet — add a product or device.</p>
+                    </div>
+                  )}
+                </div>
+
+                <Button type="submit" className="min-h-11">Create Draft</Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </PageHeaderActions>
+      </PageHeader>
+
+      {error ? <p role="alert" aria-live="polite" className="text-sm text-[var(--status-critical)] border border-destructive/20 bg-destructive/10 rounded-md p-3">{error}</p> : null}
+
       <Card className="border-hairline">
         <CardHeader>
           <CardTitle className="text-base">All Purchases</CardTitle>
           <CardDescription>Draft → Receive (stock) / Cancel</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Invoice</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Items</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {purchases.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-medium tabular-nums">{p.invoice_reference || p.id.slice(0, 8)}</TableCell>
-                  <TableCell>
-                    <Badge variant={p.status === "received" ? "default" : p.status === "cancelled" ? "destructive" : "secondary"} className="rounded-full">{p.status}</Badge>
-                  </TableCell>
-                  <TableCell className="text-xs">{p.items.length} item{p.items.length !== 1 ? "s" : ""} {p.items.some((i) => i.serial_number) ? "(+devices)" : ""}</TableCell>
-                  <TableCell className="text-xs tabular-nums">{new Date(p.purchase_date).toLocaleDateString()}</TableCell>
-                  <TableCell className="text-right flex gap-1 justify-end flex-wrap">
-                    {p.status === "draft" && <Button size="sm" onClick={() => handleReceive(p.id)}>Receive</Button>}
-                    {p.status === "draft" && <Button variant="outline" size="sm" onClick={() => handleCancel(p.id)}>Cancel</Button>}
-                    <Button variant="outline" size="sm" onClick={() => handleDelete(p.id)} disabled={p.status !== "draft"}>Delete</Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {!purchases.length && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">No purchases yet</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          {purchases.length ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <caption className="sr-only">All purchases with status and actions</caption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead scope="col">Invoice</TableHead>
+                    <TableHead scope="col">Status</TableHead>
+                    <TableHead scope="col">Items</TableHead>
+                    <TableHead scope="col">Date</TableHead>
+                    <TableHead scope="col" className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {purchases.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-medium tabular-nums text-xs">{p.invoice_reference || p.id.slice(0, 8)}</TableCell>
+                      <TableCell>
+                        <Badge variant={p.status === "received" ? "default" : p.status === "cancelled" ? "destructive" : "secondary"} className="rounded-full">{p.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-xs">{p.items.length} item{p.items.length !== 1 ? "s" : ""} {p.items.some((i) => i.serial_number) ? "(+devices)" : ""}</TableCell>
+                      <TableCell className="text-xs tabular-nums">{formatDate(p.purchase_date)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex flex-wrap justify-end gap-1">
+                          {p.status === "draft" ? <Button size="sm" onClick={() => setConfirmReceive(p.id)} className="min-h-9" aria-busy={actionBusy === p.id} disabled={actionBusy === p.id}>Receive</Button> : null}
+                          {p.status === "draft" ? <Button variant="outline" size="sm" onClick={() => setConfirmCancel(p.id)} className="min-h-9" aria-busy={actionBusy === p.id} disabled={actionBusy === p.id}>Cancel</Button> : null}
+                          <Button variant="outline" size="sm" onClick={() => setConfirmDelete(p.id)} disabled={p.status !== "draft" || actionBusy === p.id} className="min-h-9 disabled:opacity-50">Delete</Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <EmptyState title="No purchases yet" description="Create a draft purchase with products or serialized devices, then Receive to update stock.">
+              <Button onClick={() => setOpen(true)} className="min-h-11">New Purchase</Button>
+            </EmptyState>
+          )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!confirmReceive}
+        onOpenChange={(v) => !v && setConfirmReceive(null)}
+        title="Receive purchase?"
+        description="Stock will be increased and devices created. This writes ledger entries and cannot be undone without a reversal."
+        confirmLabel="Receive"
+        onConfirm={() => { if (confirmReceive) void doReceive(confirmReceive); }}
+        loading={actionBusy === confirmReceive}
+      />
+      <ConfirmDialog
+        open={!!confirmCancel}
+        onOpenChange={(v) => !v && setConfirmCancel(null)}
+        title="Cancel purchase?"
+        description="This draft purchase will be cancelled and cannot be received."
+        confirmLabel="Cancel purchase"
+        variant="destructive"
+        onConfirm={() => { if (confirmCancel) void doCancel(confirmCancel); }}
+        loading={actionBusy === confirmCancel}
+      />
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onOpenChange={(v) => !v && setConfirmDelete(null)}
+        title="Delete draft purchase?"
+        description="Only draft purchases can be deleted. This cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => { if (confirmDelete) void doDelete(confirmDelete); }}
+        loading={actionBusy === confirmDelete}
+      />
     </div>
   );
 }

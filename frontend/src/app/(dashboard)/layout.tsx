@@ -7,16 +7,25 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, ScanLine } from "lucide-react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { Search, ScanLine, X } from "lucide-react";
+import { BusinessProvider, useBusiness } from "@/components/providers/business-provider";
+import { API_URL } from "@/lib/fetch-with-auth";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <BusinessProvider>
+      <DashboardLayoutInner>{children}</DashboardLayoutInner>
+    </BusinessProvider>
+  );
+}
+
+function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { data: session, isPending } = useSession();
+  const { state: bizState } = useBusiness();
   const [search, setSearch] = useState("");
   const [searching, setSearching] = useState(false);
-  const [businessName, setBusinessName] = useState<string>("");
+  const businessName = bizState.business?.name || bizState.business?.slug || "";
 
   useEffect(() => {
     if (!isPending && !session?.user) {
@@ -33,23 +42,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
     }
   }, [isPending, session, router]);
-
-  useEffect(() => {
-    async function loadBusiness() {
-      const token = (session?.session as unknown as { token?: string } | undefined)?.token;
-      if (!token) return;
-      try {
-        const res = await fetch(`${API_URL}/api/v1/business/`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.length) setBusinessName(data[0].name || data[0].slug || "");
-        }
-      } catch {}
-    }
-    loadBusiness();
-  }, [session]);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -114,20 +106,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
           <form onSubmit={handleSearch} data-tour="global-search" className="flex flex-1 max-w-md items-center gap-2 sm:ml-auto" role="search" aria-label="Global IMEI/serial search">
             <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search IMEI, serial or barcode…"
                 aria-label="Search IMEI, serial or barcode"
-                className="h-9 pl-8 text-sm bg-background"
+                className="h-9 pl-8 pr-8 text-sm bg-background"
+                type="search"
+                enterKeyHint="search"
                 inputMode="search"
                 autoComplete="off"
+                spellCheck={false}
+                aria-busy={searching}
               />
+              {search ? (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  aria-label="Clear search"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <X className="size-4" aria-hidden="true" />
+                </button>
+              ) : null}
             </div>
-            <Button type="submit" size="sm" disabled={searching} aria-label="Search device" className="shrink-0 min-h-9">
-              <ScanLine className="size-4" />
-              <span className="hidden sm:inline">{searching ? "…" : "Search"}</span>
+            <Button type="submit" size="sm" disabled={searching} aria-label="Search device" aria-busy={searching} className="shrink-0 min-h-9">
+              <ScanLine aria-hidden="true" className="size-4" />
+              <span className="hidden sm:inline">{searching ? "Searching…" : "Search"}</span>
             </Button>
           </form>
         </header>

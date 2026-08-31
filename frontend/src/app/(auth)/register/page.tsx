@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Field } from "@/components/field";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -67,30 +67,26 @@ export default function RegisterPage() {
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold">S</div>
             <span className="text-sm font-semibold tracking-tight">Stagcore</span>
           </div>
-          <CardTitle className="text-xl tracking-tight">Create your account</CardTitle>
+          <CardTitle className="text-xl tracking-tight text-pretty">Create your account</CardTitle>
           <CardDescription>Set up your business in one step</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="name">Your name</Label>
-              <Input id="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Jane Doe" />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com" />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="At least 8 characters" />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="business">Business name</Label>
-              <Input id="business" autoComplete="organization" value={businessName} onChange={(e) => setBusinessName(e.target.value)} required placeholder="My Gadget Shop" />
-            </div>
+            <Field label="Your name" htmlFor="register-name" required>
+              <Input id="register-name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. Jane Doe…" />
+            </Field>
+            <Field label="Email" htmlFor="register-email" required>
+              <Input id="register-email" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="e.g. you@example.com…" aria-invalid={!!error} />
+            </Field>
+            <Field label="Password" htmlFor="register-password" required hint="At least 8 characters">
+              <Input id="register-password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="At least 8 characters…" aria-invalid={!!error} />
+            </Field>
+            <Field label="Business name" htmlFor="register-business" required>
+              <Input id="register-business" autoComplete="organization" value={businessName} onChange={(e) => setBusinessName(e.target.value)} required placeholder="e.g. My Gadget Shop…" />
+            </Field>
             {error && <p role="alert" aria-live="polite" className="text-sm text-[var(--status-critical)] border border-critical/20 bg-critical/10 rounded-md p-2">{error}</p>}
-            <Button type="submit" disabled={loading} aria-busy={loading} className="w-full">
-              {loading ? "Creating account..." : "Create account"}
+            <Button type="submit" disabled={loading} aria-busy={loading} className="w-full min-h-11">
+              {loading ? "Creating account…" : "Create account"}
             </Button>
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">

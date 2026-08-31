@@ -3,14 +3,16 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "@/lib/auth-client";
-import { Button } from "@/components/ui/button";
-import { HelpButton } from "@/components/help/help-button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { EmptyState } from "@/components/empty-state";
+import { Field } from "@/components/field";
+import { HelpButton } from "@/components/help/help-button";
+import { PageHeader, PageHeaderActions, PageHeaderContent, PageHeaderDescription, PageHeaderTitle } from "@/components/page-header";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -93,14 +95,16 @@ export default function TransfersPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold">Transfers</h1>
-          <p className="text-sm text-muted-foreground">Move stock between locations — atomic TRANSFER_OUT + TRANSFER_IN</p>
-        </div>
-        <HelpButton slug="transfers-locations" />
-      </div>
-      {error && <p className="text-sm text-[var(--status-critical)] border border-hairline rounded-md p-3 bg-surface">{error}</p>}
+      <PageHeader>
+        <PageHeaderContent>
+          <PageHeaderTitle>Transfers</PageHeaderTitle>
+          <PageHeaderDescription>Move stock between locations — atomic TRANSFER_OUT + TRANSFER_IN</PageHeaderDescription>
+        </PageHeaderContent>
+        <PageHeaderActions>
+          <HelpButton slug="transfers-locations" />
+        </PageHeaderActions>
+      </PageHeader>
+      {error && <p role="alert" aria-live="polite" className="text-sm text-[var(--status-critical)] border border-hairline rounded-md p-3 bg-surface">{error}</p>}
       <Card className="border-hairline">
         <CardHeader>
           <CardTitle className="text-base">New Transfer</CardTitle>
@@ -108,66 +112,59 @@ export default function TransfersPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleCreate} className="flex flex-col gap-4">
-            <div className="flex gap-2">
-              <Button type="button" variant={mode === "product" ? "default" : "outline"} onClick={() => setMode("product")}>Product</Button>
-              <Button type="button" variant={mode === "device" ? "default" : "outline"} onClick={() => setMode("device")}>Device</Button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button type="button" variant={mode === "product" ? "default" : "outline"} onClick={() => setMode("product")} className="min-h-9">Product</Button>
+              <Button type="button" variant={mode === "device" ? "default" : "outline"} onClick={() => setMode("device")} className="min-h-9">Device</Button>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-2">
-                <Label>From location *</Label>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="From location" htmlFor="transfer-from" required>
                 <Select value={form.from_location_id || "none"} onValueChange={(v) => setForm({ ...form, from_location_id: v === "none" ? "" : v })}>
-                  <SelectTrigger><SelectValue placeholder="Source" /></SelectTrigger>
+                  <SelectTrigger id="transfer-from"><SelectValue placeholder="Source…" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Select</SelectItem>
+                    <SelectItem value="none">Select…</SelectItem>
                     {locations.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label>To location *</Label>
+              </Field>
+              <Field label="To location" htmlFor="transfer-to" required>
                 <Select value={form.to_location_id || "none"} onValueChange={(v) => setForm({ ...form, to_location_id: v === "none" ? "" : v })}>
-                  <SelectTrigger><SelectValue placeholder="Destination" /></SelectTrigger>
+                  <SelectTrigger id="transfer-to"><SelectValue placeholder="Destination…" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Select</SelectItem>
+                    <SelectItem value="none">Select…</SelectItem>
                     {locations.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
-              </div>
+              </Field>
             </div>
             {mode === "product" ? (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-2">
-                  <Label>Product *</Label>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Product" htmlFor="transfer-product" required hint={preview !== null ? `Source stock: ${preview}` : undefined}>
                   <Select value={form.product_id || "none"} onValueChange={(v) => setForm({ ...form, product_id: v === "none" ? "" : v })}>
-                    <SelectTrigger><SelectValue placeholder="Product" /></SelectTrigger>
+                    <SelectTrigger id="transfer-product"><SelectValue placeholder="Product…" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Select</SelectItem>
+                      <SelectItem value="none">Select…</SelectItem>
                       {products.map((p) => <SelectItem key={p.id} value={p.id}>{p.name} {p.sku ? `(${p.sku})` : ""}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  {preview !== null && <span className="text-xs text-muted-foreground tabular-nums">Source stock: {preview}</span>}
-                </div>
-                <div className="flex flex-col gap-2">
-                  <Label>Quantity</Label>
-                  <Input type="number" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} min="1" />
-                </div>
+                </Field>
+                <Field label="Quantity" htmlFor="transfer-qty" hint="Units to move">
+                  <Input id="transfer-qty" type="number" inputMode="numeric" min="1" step="1" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} placeholder="1" autoComplete="off" className="tabular-nums" />
+                </Field>
               </div>
             ) : (
-              <div className="flex flex-col gap-2">
-                <Label>Device * (any status, will move location)</Label>
+              <Field label="Device" htmlFor="transfer-device" required hint="Any status, will move location">
                 <Select value={form.device_id || "none"} onValueChange={(v) => setForm({ ...form, device_id: v === "none" ? "" : v })}>
-                  <SelectTrigger><SelectValue placeholder="Device" /></SelectTrigger>
+                  <SelectTrigger id="transfer-device"><SelectValue placeholder="Device…" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Select</SelectItem>
+                    <SelectItem value="none">Select…</SelectItem>
                     {devices.map((d) => <SelectItem key={d.id} value={d.id}>{d.product_name} · {d.serial_number} {d.imei ? `(${d.imei})` : ""} · {d.status} @ {locations.find((l) => l.id === d.location_id)?.name || "no loc"}</SelectItem>)}
                   </SelectContent>
                 </Select>
-              </div>
+              </Field>
             )}
-            <div className="flex flex-col gap-2">
-              <Label>Notes (optional)</Label>
-              <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Transfer reason" />
-            </div>
+            <Field label="Notes" htmlFor="transfer-notes" hint="Optional reason">
+              <Input id="transfer-notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="e.g. Restock branch…" autoComplete="off" />
+            </Field>
             <Button type="submit" className="min-h-11">Transfer</Button>
           </form>
         </CardContent>
@@ -179,29 +176,33 @@ export default function TransfersPage() {
           <CardDescription>Header + ledger pair (reference = transfer id)</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Item</TableHead>
-                <TableHead>From → To</TableHead>
-                <TableHead>Qty</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {transfers.map((t) => (
-                <TableRow key={t.id}>
-                  <TableCell className="text-xs tabular-nums">{new Date(t.created_at).toLocaleString()}</TableCell>
-                  <TableCell className="text-xs tabular-nums max-w-[180px] truncate">{t.product_id ? `Prod ${t.product_id.slice(0, 8)}` : `Dev ${t.device_id?.slice(0, 8)}`}</TableCell>
-                  <TableCell className="text-xs">{locations.find((l) => l.id === t.from_location_id)?.name || t.from_location_id.slice(0, 6)} → {locations.find((l) => l.id === t.to_location_id)?.name || t.to_location_id.slice(0, 6)}</TableCell>
-                  <TableCell className="tabular-nums">{t.quantity}</TableCell>
-                  <TableCell><Badge variant="secondary" className="rounded-full">{t.status}</Badge></TableCell>
+          {transfers.length ? (
+            <Table>
+              <caption className="sr-only">Recent stock transfers</caption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead scope="col" className="sticky top-0 bg-surface z-10">Date</TableHead>
+                  <TableHead scope="col" className="sticky top-0 bg-surface z-10">Item</TableHead>
+                  <TableHead scope="col" className="sticky top-0 bg-surface z-10">From → To</TableHead>
+                  <TableHead scope="col" className="sticky top-0 bg-surface z-10 text-right">Qty</TableHead>
+                  <TableHead scope="col" className="sticky top-0 bg-surface z-10">Status</TableHead>
                 </TableRow>
-              ))}
-              {!transfers.length && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No transfers yet</TableCell></TableRow>}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {transfers.map((t) => (
+                  <TableRow key={t.id}>
+                    <TableCell className="text-xs tabular-nums">{new Date(t.created_at).toLocaleString()}</TableCell>
+                    <TableCell className="text-xs tabular-nums max-w-[180px] truncate">{t.product_id ? `Prod ${t.product_id.slice(0, 8)}` : `Dev ${t.device_id?.slice(0, 8)}`}</TableCell>
+                    <TableCell className="text-xs">{locations.find((l) => l.id === t.from_location_id)?.name || t.from_location_id.slice(0, 6)} → {locations.find((l) => l.id === t.to_location_id)?.name || t.to_location_id.slice(0, 6)}</TableCell>
+                    <TableCell className="tabular-nums text-right">{t.quantity}</TableCell>
+                    <TableCell><Badge variant="secondary" className="rounded-full">{t.status}</Badge></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <EmptyState title="No transfers yet" description="Create your first stock transfer to move inventory between locations." />
+          )}
         </CardContent>
       </Card>
     </div>

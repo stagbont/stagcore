@@ -9,8 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { HelpButton } from "@/components/help/help-button";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { PageHeader, PageHeaderActions, PageHeaderContent, PageHeaderDescription, PageHeaderTitle } from "@/components/page-header";
+import { EmptyState } from "@/components/empty-state";
+import { useBusiness } from "@/components/providers/business-provider";
+import { API_URL } from "@/lib/fetch-with-auth";
+import { formatCurrency, formatDateTime, formatVelocity, formatStockoutLabel } from "@/lib/format";
 
 interface TopProduct {
   product_id: string;
@@ -79,7 +82,9 @@ function KpiSkeleton() {
 
 export default function DashboardPage() {
   const { data: session } = useSession();
-  const [business, setBusiness] = useState<{ id: string; name: string; slug: string } | null>(null);
+  const { state: bizState } = useBusiness();
+  const business = bizState.business;
+  const businessId = business?.id ?? null;
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [intelligenceMap, setIntelligenceMap] = useState<Record<string, IntelligenceItem>>({});
@@ -89,30 +94,19 @@ export default function DashboardPage() {
   const loadData = useCallback(async () => {
     const token = (session?.session as unknown as { token?: string } | undefined)?.token;
     if (!token) return;
+    if (!businessId) {
+      if (!bizState.loading) setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError("");
 
-      const bizRes = await fetch(`${API_URL}/api/v1/business/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!bizRes.ok) {
-        setError(await bizRes.text());
-        return;
-      }
-      const businesses = await bizRes.json();
-      if (!businesses.length) {
-        setError("No business found — create one via registration.");
-        return;
-      }
-      const biz = businesses[0];
-      setBusiness(biz);
-
       const [sumRes, actRes] = await Promise.all([
-        fetch(`${API_URL}/api/v1/dashboard/summary?business_id=${biz.id}`, {
+        fetch(`${API_URL}/api/v1/dashboard/summary?business_id=${businessId}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${API_URL}/api/v1/dashboard/activity?business_id=${biz.id}&limit=10`, {
+        fetch(`${API_URL}/api/v1/dashboard/activity?business_id=${businessId}&limit=10`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
@@ -130,7 +124,7 @@ export default function DashboardPage() {
 
       try {
         const intelRes = await fetch(
-          `${API_URL}/api/v1/intelligence/overview?business_id=${biz.id}&window_days=30&sort_by=urgency&limit=100`,
+          `${API_URL}/api/v1/intelligence/overview?business_id=${businessId}&window_days=30&sort_by=urgency&limit=100`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (intelRes.ok) {
@@ -147,49 +141,11 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [session]);
+  }, [session, businessId, bizState.loading]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  const formatCurrency = (val?: string | number) => {
-    if (val === undefined || val === null) return "$0.00";
-    const n = typeof val === "number" ? val : parseFloat(val);
-    return isNaN(n) ? "$0.00" : `$${n.toFixed(2)}`;
-  };
-
-  const formatDate = (iso: string) => {
-    try {
-      const d = new Date(iso);
-      return d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: true });
-    } catch {
-      return iso;
-    }
-  };
-
-  const formatVelocity = (v?: string | number) => {
-    if (v === undefined || v === null) return "—";
-    const n = typeof v === "number" ? v : parseFloat(v);
-    if (isNaN(n) || n === 0) return "stable";
-    return `${n.toFixed(2)}/d`;
-  };
-
-  const stockoutLabel = (item: IntelligenceItem | undefined) => {
-    if (!item) return null;
-    if (item.stock_status === "stable") return "Stable · no recent sales";
-    if (item.days_until_stockout === null || item.days_until_stockout === undefined) return null;
-    if (item.days_until_stockout === 0) return "Stockout today";
-    if (item.days_until_stockout === 1) return "1 day left";
-    if (item.estimated_stockout_date) {
-      try {
-        return `${item.days_until_stockout}d · ${new Date(item.estimated_stockout_date).toLocaleDateString()}`;
-      } catch {
-        return `${item.days_until_stockout}d`;
-      }
-    }
-    return `${item.days_until_stockout}d`;
-  };
 
   const urgencyVariant = (status?: string): "critical" | "warning" | "success" | "secondary" | "outline" => {
     if (status === "out_of_stock" || status === "critical") return "critical";
@@ -208,20 +164,19 @@ export default function DashboardPage() {
     return status || "—";
   };
 
+  const isInitialLoading = loading && !summary && bizState.loading;
+
   return (
     <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight">Executive Dashboard</h1>
-            <HelpButton slug="quick-start" />
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {business ? `${business.name} (${business.slug}) · Real-Time Operations Overview` : "Loading workspace..."}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      <PageHeader>
+        <PageHeaderContent>
+          <PageHeaderTitle className="text-pretty tracking-tight">Executive Dashboard</PageHeaderTitle>
+          <PageHeaderDescription>
+            {business ? `${business.name} (${business.slug}) · Real-Time Operations Overview` : bizState.loading ? "Loading workspace..." : "No workspace selected"}
+          </PageHeaderDescription>
+        </PageHeaderContent>
+        <PageHeaderActions>
+          <HelpButton slug="quick-start" />
           <Link href="/sales">
             <Button className="min-h-11 font-medium">+ New POS Sale</Button>
           </Link>
@@ -231,8 +186,8 @@ export default function DashboardPage() {
           <Link href="/reports">
             <Button variant="outline" className="min-h-11">Detailed Reports</Button>
           </Link>
-        </div>
-      </div>
+        </PageHeaderActions>
+      </PageHeader>
 
       {error && (
         <div role="alert" aria-live="polite" className="flex flex-col gap-2 rounded-lg border border-critical/30 bg-critical/10 p-4 text-sm text-critical sm:flex-row sm:items-center sm:justify-between">
@@ -243,7 +198,7 @@ export default function DashboardPage() {
 
       {/* KPI Cards */}
       <div data-tour="dashboard-kpis" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {loading ? (
+        {isInitialLoading || loading ? (
           <>
             <KpiSkeleton />
             <KpiSkeleton />
@@ -323,7 +278,7 @@ export default function DashboardPage() {
             <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <caption className="sr-only">Low stock items sorted by urgency</caption>
-                <TableHeader>
+                <TableHeader className="sticky top-0 bg-surface z-10">
                   <TableRow>
                     <TableHead scope="col">Product</TableHead>
                     <TableHead scope="col">Category</TableHead>
@@ -366,7 +321,7 @@ export default function DashboardPage() {
                         return da - db;
                       });
                       return enriched.map(({ raw: item, intel }) => {
-                        const so = stockoutLabel(intel);
+                        const so = formatStockoutLabel(intel);
                         const vel = intel ? formatVelocity(intel.daily_velocity) : "—";
                         const status = intel?.stock_status || (item.current_stock <= 0 ? "out_of_stock" : "low");
                         return (
@@ -374,7 +329,15 @@ export default function DashboardPage() {
                             <TableCell className="font-medium">
                               <div>{item.product_name}</div>
                               {item.sku && <div className="text-xs text-muted-foreground tabular-nums">{item.sku}</div>}
-                              {so && <div className="text-[11px] text-muted-foreground tabular-nums">{so}{intel && intel.suggested_order_qty > 0 ? ` · suggest ${intel.suggested_order_qty}` : ""}</div>}
+                              {so && (
+                                <div className="text-[11px] text-muted-foreground tabular-nums">
+                                  {so}
+                                  {intel && intel.suggested_order_qty > 0 ? ` · suggest ${intel.suggested_order_qty}` : ""}
+                                  {intel?.estimated_stockout_date ? (
+                                    <time dateTime={intel.estimated_stockout_date} className="sr-only">{intel.estimated_stockout_date}</time>
+                                  ) : null}
+                                </div>
+                              )}
                             </TableCell>
                             <TableCell className="text-muted-foreground text-sm">{item.category_name || "General"}</TableCell>
                             <TableCell className="text-right font-medium tabular-nums">{item.current_stock}</TableCell>
@@ -389,8 +352,14 @@ export default function DashboardPage() {
                     })()
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-sm text-muted-foreground">
-                        All products are above minimum inventory levels.
+                      <TableCell colSpan={6} className="p-0 border-0">
+                        <div className="p-4">
+                          <EmptyState title="All products are above minimum inventory levels." description="Inventory is healthy. Review catalog or valuation when you add products.">
+                            <Link href="/products">
+                              <Button variant="outline" size="sm" className="border-hairline">Go to Products</Button>
+                            </Link>
+                          </EmptyState>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )}
@@ -408,7 +377,7 @@ export default function DashboardPage() {
             <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <caption className="sr-only">Top selling products today</caption>
-                <TableHeader>
+                <TableHeader className="sticky top-0 bg-surface z-10">
                   <TableRow>
                     <TableHead scope="col">Product</TableHead>
                     <TableHead scope="col" className="text-right">Units Sold</TableHead>
@@ -429,7 +398,7 @@ export default function DashboardPage() {
                       <TableRow key={p.product_id}>
                         <TableCell className="font-medium">
                           {p.product_name}
-                          {p.sku && <span className="ml-2 text-xs text-muted-foreground">({p.sku})</span>}
+                          {p.sku && <span className="ml-2 text-xs text-muted-foreground tabular-nums">({p.sku})</span>}
                         </TableCell>
                         <TableCell className="text-right font-medium tabular-nums">{p.units_sold}</TableCell>
                         <TableCell className="text-right tabular-nums text-foreground">{formatCurrency(p.total_revenue)}</TableCell>
@@ -474,14 +443,14 @@ export default function DashboardPage() {
                     return (
                       <div key={act.id} className="flex items-start gap-3 text-sm pb-3 border-b border-border last:border-b-0">
                         <span
-                          aria-hidden
+                          aria-hidden="true"
                           className={`mt-1 size-2 rounded-full shrink-0 ${isSale ? "bg-[var(--status-success)]" : isPur ? "bg-[var(--action-primary)]" : "bg-muted-foreground"}`}
                         />
                         <span className="sr-only">{isSale ? "Sale" : isPur ? "Purchase" : "Movement"}</span>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-medium text-xs truncate">{act.title}</span>
-                            <span className="text-[11px] text-muted-foreground shrink-0 tabular-nums">{formatDate(act.timestamp)}</span>
+                            <time dateTime={act.timestamp} className="text-[11px] text-muted-foreground shrink-0 tabular-nums">{formatDateTime(act.timestamp)}</time>
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">{act.description}</p>
                         </div>

@@ -1,30 +1,97 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
+import { useBusiness } from "@/components/providers/business-provider";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { HelpButton } from "@/components/help/help-button";
+import { PageHeader, PageHeaderActions, PageHeaderContent, PageHeaderDescription, PageHeaderTitle } from "@/components/page-header";
+import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_URL } from "@/lib/fetch-with-auth";
+import { formatCurrency, formatVelocityDay, formatStockoutShort } from "@/lib/format";
 
 type ReportTab = "sales" | "inventory" | "profit" | "products" | "suppliers" | "intelligence";
 
 interface Category { id: string; name: string; }
 interface Location { id: string; name: string; }
 
+const ALLOWED_TABS: ReportTab[] = ["sales", "inventory", "profit", "products", "suppliers", "intelligence"];
+
+function parseTab(raw: string | null): ReportTab | null {
+  if (!raw) return null;
+  return (ALLOWED_TABS as string[]).includes(raw) ? (raw as ReportTab) : null;
+}
+
+function computePresetDates(preset: "today" | "7d" | "30d" | "custom", fromParam: string | null, toParam: string | null) {
+  const end = new Date();
+  const endStr = toParam || end.toISOString().split("T")[0];
+  if (preset === "custom" && fromParam && toParam) {
+    return { start: fromParam, end: endStr };
+  }
+  const start = fromParam ? new Date(fromParam) : new Date();
+  // if fromParam exists but preset isn't custom, we still recompute based on preset for consistency
+  if (!fromParam) {
+    const s = new Date(end);
+    if (preset === "today") {
+      // same day
+    } else if (preset === "7d") {
+      s.setDate(end.getDate() - 7);
+    } else if (preset === "30d") {
+      s.setDate(end.getDate() - 30);
+    } else {
+      s.setDate(end.getDate() - 30);
+    }
+    return { start: s.toISOString().split("T")[0], end: endStr };
+  }
+  // fromParam present but preset changed to non-custom: recompute
+  if (preset !== "custom") {
+    const s = new Date(end);
+    if (preset === "today") {
+      // keep end
+    } else if (preset === "7d") s.setDate(end.getDate() - 7);
+    else if (preset === "30d") s.setDate(end.getDate() - 30);
+    return { start: s.toISOString().split("T")[0], end: endStr };
+  }
+  return { start: fromParam, end: endStr };
+}
+
 export default function ReportsPage() {
   const { data: session } = useSession();
-  const [activeTab, setActiveTab] = useState<ReportTab>("sales");
-  const [businessId, setBusinessId] = useState<string | null>(null);
-  const [dateRangePreset, setDateRangePreset] = useState<"today" | "7d" | "30d" | "custom">("30d");
-  const [startDate, setStartDate] = useState<string>("");
-  const [endDate, setEndDate] = useState<string>("");
+  const { state: bizState } = useBusiness();
+  const businessId = bizState.business?.id ?? null;
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const initialTab = parseTab(searchParams.get("tab")) ?? "sales";
+  const initialPresetRaw = searchParams.get("preset");
+  const initialPreset = (initialPresetRaw === "today" || initialPresetRaw === "7d" || initialPresetRaw === "30d" || initialPresetRaw === "custom") ? initialPresetRaw : "30d";
+  const initialFrom = searchParams.get("from");
+  const initialTo = searchParams.get("to");
+  const initialDates = (() => {
+    if (initialFrom && initialTo) return { start: initialFrom, end: initialTo };
+    const end = new Date();
+    const start = new Date();
+    if (initialPreset === "today") {
+      // start = end
+    } else if (initialPreset === "7d") start.setDate(end.getDate() - 7);
+    else if (initialPreset === "30d") start.setDate(end.getDate() - 30);
+    else start.setDate(end.getDate() - 30);
+    return { start: start.toISOString().split("T")[0], end: end.toISOString().split("T")[0] };
+  })();
+
+  const [activeTab, setActiveTab] = useState<ReportTab>(initialTab);
+  const [dateRangePreset, setDateRangePreset] = useState<"today" | "7d" | "30d" | "custom">(initialPreset as "today" | "7d" | "30d" | "custom");
+  const [startDate, setStartDate] = useState<string>(initialDates.start);
+  const [endDate, setEndDate] = useState<string>(initialDates.end);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -51,14 +118,53 @@ export default function ReportsPage() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
 
-  // Initialize dates
+  const buildUrl = useCallback((nextTab: ReportTab, nextPreset: typeof dateRangePreset, nextFrom: string, nextTo: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", nextTab);
+    // only persist preset/from/to for date-bound tabs
+    if (nextTab === "sales" || nextTab === "profit" || nextTab === "products") {
+      params.set("preset", nextPreset);
+      if (nextFrom) params.set("from", nextFrom);
+      if (nextTo) params.set("to", nextTo);
+    } else {
+      params.delete("preset");
+      params.delete("from");
+      params.delete("to");
+    }
+    return `${pathname}?${params.toString()}`;
+  }, [searchParams, pathname]);
+
+  const pushUrl = useCallback((nextTab: ReportTab, nextPreset: typeof dateRangePreset, nextFrom: string, nextTo: string) => {
+    const url = buildUrl(nextTab, nextPreset, nextFrom, nextTo);
+    const current = `${pathname}?${searchParams.toString()}`;
+    if (url !== current) router.push(url, { scroll: false });
+  }, [buildUrl, pathname, router, searchParams]);
+
+  // Keep URL in sync after first render — ensures deep linking reflection
   useEffect(() => {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(end.getDate() - 30);
-    setStartDate(start.toISOString().split("T")[0]);
-    setEndDate(end.toISOString().split("T")[0]);
+    pushUrl(activeTab, dateRangePreset, startDate, endDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Back/forward: sync state when URL changes externally
+  useEffect(() => {
+    const urlTab = parseTab(searchParams.get("tab"));
+    if (urlTab && urlTab !== activeTab) setActiveTab(urlTab);
+    const urlPreset = searchParams.get("preset");
+    if (urlPreset && (urlPreset === "today" || urlPreset === "7d" || urlPreset === "30d" || urlPreset === "custom") && urlPreset !== dateRangePreset) {
+      setDateRangePreset(urlPreset);
+    }
+    const urlFrom = searchParams.get("from");
+    const urlTo = searchParams.get("to");
+    if (urlFrom !== null && urlFrom !== startDate) setStartDate(urlFrom);
+    if (urlTo !== null && urlTo !== endDate) setEndDate(urlTo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const handleTabChange = (tab: ReportTab) => {
+    setActiveTab(tab);
+    pushUrl(tab, dateRangePreset, startDate, endDate);
+  };
 
   const handlePresetChange = (preset: "today" | "7d" | "30d" | "custom") => {
     setDateRangePreset(preset);
@@ -72,30 +178,27 @@ export default function ReportsPage() {
       start.setDate(end.getDate() - 30);
     }
     if (preset !== "custom") {
-      setStartDate(start.toISOString().split("T")[0]);
-      setEndDate(end.toISOString().split("T")[0]);
+      const s = start.toISOString().split("T")[0];
+      const e = end.toISOString().split("T")[0];
+      setStartDate(s);
+      setEndDate(e);
+      pushUrl(activeTab, preset, s, e);
+    } else {
+      pushUrl(activeTab, preset, startDate, endDate);
     }
   };
 
-  // Load business id
-  useEffect(() => {
-    async function loadBusiness() {
-      const token = (session?.session as unknown as { token?: string } | undefined)?.token;
-      if (!token) return;
-      try {
-        const res = await fetch(`${API_URL}/api/v1/business/`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.length) setBusinessId(data[0].id);
-        }
-      } catch (e) {
-        setError(String(e));
-      }
-    }
-    loadBusiness();
-  }, [session]);
+  const handleStartDateChange = (v: string) => {
+    setStartDate(v);
+    setDateRangePreset("custom");
+    pushUrl(activeTab, "custom", v, endDate);
+  };
+
+  const handleEndDateChange = (v: string) => {
+    setEndDate(v);
+    setDateRangePreset("custom");
+    pushUrl(activeTab, "custom", startDate, v);
+  };
 
   // Load locations + categories once businessId known (for intelligence filters)
   useEffect(() => {
@@ -217,57 +320,39 @@ export default function ReportsPage() {
     fetchIntelligence();
   }, [activeTab, businessId, intelWindow, intelLead, intelSafety, intelCoverage, intelLocation, intelCategory, intelSearch, intelSort, session]);
 
-  const formatCurrency = (val?: string | number) => {
-    if (val === undefined || val === null) return "$0.00";
-    const n = typeof val === "number" ? val : parseFloat(val);
-    return isNaN(n) ? "$0.00" : `$${n.toFixed(2)}`;
-  };
-
-  const formatVelocity = (val?: string | number) => {
-    if (val === undefined || val === null) return "—";
-    const n = typeof val === "number" ? val : parseFloat(val);
-    if (isNaN(n)) return "—";
-    return `${n.toFixed(2)}/day`;
-  };
-
-  const formatStockout = (days?: number | null, dateStr?: string | null) => {
-    if (days === null || days === undefined) return "—";
-    if (days === 0) return "Today";
-    if (days === 1) return "1 day";
-    const d = dateStr ? new Date(dateStr).toLocaleDateString() : "";
-    return `${days}d${d ? ` · ${d}` : ""}`;
-  };
-
   const statusBadge = (status: string) => {
-    if (status === "out_of_stock") return <Badge variant="destructive" className="text-[10px] uppercase">Out</Badge>;
-    if (status === "critical") return <Badge variant="destructive" className="text-[10px] uppercase bg-[var(--status-critical)]/10 text-[var(--status-critical)] border-[var(--status-critical)]/20">Critical</Badge>;
-    if (status === "low") return <Badge variant="outline" className="text-[10px] uppercase text-amber-600 border-amber-500/30">Low</Badge>;
-    if (status === "stable") return <Badge variant="secondary" className="text-[10px]">Stable</Badge>;
-    return <Badge variant="secondary" className="text-[10px]">OK</Badge>;
+    if (status === "out_of_stock") return <Badge variant="critical" className="text-[10px] uppercase tracking-wider">Out</Badge>;
+    if (status === "critical") return <Badge variant="critical" className="text-[10px] uppercase tracking-wider">Critical</Badge>;
+    if (status === "low") return <Badge variant="warning" className="text-[10px] uppercase tracking-wider">Low</Badge>;
+    if (status === "stable") return <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">Stable</Badge>;
+    return <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">OK</Badge>;
   };
+
+  const isDateBoundTab = activeTab === "sales" || activeTab === "profit" || activeTab === "products";
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Business Intelligence & Reports</h1>
-          <p className="text-sm text-muted-foreground">
+      <PageHeader>
+        <PageHeaderContent>
+          <PageHeaderTitle className="text-pretty tracking-tight">Business Intelligence &amp; Reports</PageHeaderTitle>
+          <PageHeaderDescription>
             Financial summaries, inventory ledger valuation, product metrics, and supplier analytics
-          </p>
-        </div>
-        <HelpButton slug="dashboard-reports" />
-      </div>
+          </PageHeaderDescription>
+        </PageHeaderContent>
+        <PageHeaderActions>
+          <HelpButton slug="dashboard-reports" />
+        </PageHeaderActions>
+      </PageHeader>
 
       {error && (
-        <div className="rounded-lg border border-[var(--status-critical)]/30 bg-[var(--status-critical)]/10 p-4 text-sm text-[var(--status-critical)]">
+        <div role="alert" aria-live="polite" className="rounded-lg border border-[var(--status-critical)]/30 bg-[var(--status-critical)]/10 p-4 text-sm text-[var(--status-critical)]">
           {error}
         </div>
       )}
 
       {/* Navigation Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-hairline pb-3">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Report sections">
           {[
             { key: "sales", label: "Sales & Revenue" },
             { key: "inventory", label: "Inventory & Valuation" },
@@ -280,9 +365,11 @@ export default function ReportsPage() {
             return (
               <Button
                 key={tab.key}
+                role="tab"
+                aria-selected={active}
                 variant={active ? "default" : "outline"}
                 size="sm"
-                onClick={() => setActiveTab(tab.key as ReportTab)}
+                onClick={() => handleTabChange(tab.key as ReportTab)}
                 className={`text-xs font-medium ${active ? "bg-primary text-primary-foreground" : "border-hairline text-muted-foreground"}`}
               >
                 {tab.label}
@@ -292,15 +379,16 @@ export default function ReportsPage() {
         </div>
 
         {/* Date Filter Controls (applicable to date-bound reports) */}
-        {activeTab !== "inventory" && activeTab !== "suppliers" && activeTab !== "intelligence" && (
+        {isDateBoundTab && (
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 rounded-md border border-hairline bg-surface p-1">
+            <div role="group" aria-label="Date range" className="flex items-center gap-1 rounded-md border border-hairline bg-surface p-1">
               {(["today", "7d", "30d", "custom"] as const).map((preset) => (
                 <button
                   key={preset}
                   type="button"
+                  aria-pressed={dateRangePreset === preset}
                   onClick={() => handlePresetChange(preset)}
-                  className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                  className={`rounded px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--action-primary)] focus-visible:ring-offset-2 ${
                     dateRangePreset === preset
                       ? "bg-background text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
@@ -313,19 +401,27 @@ export default function ReportsPage() {
 
             {dateRangePreset === "custom" && (
               <div className="flex items-center gap-2">
-                <Input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="h-8 w-36 text-xs border-hairline"
-                />
-                <span className="text-xs text-muted-foreground">to</span>
-                <Input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="h-8 w-36 text-xs border-hairline"
-                />
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="reports-start-date" className="text-xs font-medium">From</Label>
+                  <Input
+                    id="reports-start-date"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => handleStartDateChange(e.target.value)}
+                    className="h-8 w-36 text-xs border-hairline"
+                  />
+                </div>
+                <span className="text-xs text-muted-foreground pt-5">to</span>
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="reports-end-date" className="text-xs font-medium">To</Label>
+                  <Input
+                    id="reports-end-date"
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => handleEndDateChange(e.target.value)}
+                    className="h-8 w-36 text-xs border-hairline"
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -338,7 +434,7 @@ export default function ReportsPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="border-hairline bg-surface">
               <CardHeader className="pb-2">
-                <CardDescription className="text-xs uppercase">Total Sales Revenue</CardDescription>
+                <CardDescription className="text-xs uppercase tracking-wider font-medium">Total Sales Revenue</CardDescription>
                 <CardTitle className="text-2xl font-bold tabular-nums">
                   {loading ? "..." : formatCurrency(salesReport?.total_revenue)}
                 </CardTitle>
@@ -350,7 +446,7 @@ export default function ReportsPage() {
 
             <Card className="border-hairline bg-surface">
               <CardHeader className="pb-2">
-                <CardDescription className="text-xs uppercase">Average Order Value</CardDescription>
+                <CardDescription className="text-xs uppercase tracking-wider font-medium">Average Order Value</CardDescription>
                 <CardTitle className="text-2xl font-bold tabular-nums">
                   {loading ? "..." : formatCurrency(salesReport?.average_order_value)}
                 </CardTitle>
@@ -362,7 +458,7 @@ export default function ReportsPage() {
 
             <Card className="border-hairline bg-surface">
               <CardHeader className="pb-2">
-                <CardDescription className="text-xs uppercase">Total Items Sold</CardDescription>
+                <CardDescription className="text-xs uppercase tracking-wider font-medium">Total Items Sold</CardDescription>
                 <CardTitle className="text-2xl font-bold tabular-nums">
                   {loading ? "..." : salesReport?.total_items_sold || 0}
                 </CardTitle>
@@ -374,7 +470,7 @@ export default function ReportsPage() {
 
             <Card className="border-hairline bg-surface">
               <CardHeader className="pb-2">
-                <CardDescription className="text-xs uppercase">Discounts Granted</CardDescription>
+                <CardDescription className="text-xs uppercase tracking-wider font-medium">Discounts Granted</CardDescription>
                 <CardTitle className="text-2xl font-bold tabular-nums text-muted-foreground">
                   {loading ? "..." : formatCurrency(salesReport?.total_discounts)}
                 </CardTitle>
@@ -393,7 +489,7 @@ export default function ReportsPage() {
               return (
                 <Card key={pmKey} className="border-hairline">
                   <CardHeader className="pb-2">
-                    <CardDescription className="text-xs">{label}</CardDescription>
+                    <CardDescription className="text-xs tracking-wider font-medium">{label}</CardDescription>
                     <CardTitle className="text-xl tabular-nums">
                       {formatCurrency(pmData?.total_amount)}
                     </CardTitle>
@@ -414,15 +510,16 @@ export default function ReportsPage() {
               <CardTitle className="text-base font-semibold">Daily Sales Performance</CardTitle>
               <CardDescription className="text-xs">Aggregated revenue and volume per day</CardDescription>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
-                <TableHeader>
+                <caption className="sr-only">Daily sales performance aggregated per day</caption>
+                <TableHeader className="sticky top-0 bg-surface z-10">
                   <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Orders</TableHead>
-                    <TableHead className="text-right">Items Sold</TableHead>
-                    <TableHead className="text-right">Discounts</TableHead>
-                    <TableHead className="text-right">Total Revenue</TableHead>
+                    <TableHead scope="col">Date</TableHead>
+                    <TableHead scope="col" className="text-right">Orders</TableHead>
+                    <TableHead scope="col" className="text-right">Items Sold</TableHead>
+                    <TableHead scope="col" className="text-right">Discounts</TableHead>
+                    <TableHead scope="col" className="text-right">Total Revenue</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -448,8 +545,14 @@ export default function ReportsPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-6 text-sm text-muted-foreground">
-                        No sales found for the selected period.
+                      <TableCell colSpan={5} className="p-0 border-0">
+                        <div className="p-4">
+                          <EmptyState title="No sales for the selected period." description="Try adjusting the date range or complete a POS sale.">
+                            <Link href="/sales">
+                              <Button variant="outline" size="sm" className="border-hairline">Go to Sales</Button>
+                            </Link>
+                          </EmptyState>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )}
@@ -466,7 +569,7 @@ export default function ReportsPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="border-hairline bg-surface">
               <CardHeader className="pb-2">
-                <CardDescription className="text-xs uppercase">Total Inventory Valuation</CardDescription>
+                <CardDescription className="text-xs uppercase tracking-wider font-medium">Total Inventory Valuation</CardDescription>
                 <CardTitle className="text-2xl font-bold tabular-nums">
                   {loading ? "..." : formatCurrency(inventoryReport?.total_valuation)}
                 </CardTitle>
@@ -478,7 +581,7 @@ export default function ReportsPage() {
 
             <Card className="border-hairline bg-surface">
               <CardHeader className="pb-2">
-                <CardDescription className="text-xs uppercase">Serialized Devices Value</CardDescription>
+                <CardDescription className="text-xs uppercase tracking-wider font-medium">Serialized Devices Value</CardDescription>
                 <CardTitle className="text-2xl font-bold tabular-nums">
                   {loading ? "..." : formatCurrency(inventoryReport?.serialized_valuation)}
                 </CardTitle>
@@ -490,7 +593,7 @@ export default function ReportsPage() {
 
             <Card className="border-hairline bg-surface">
               <CardHeader className="pb-2">
-                <CardDescription className="text-xs uppercase">Non-Serialized Value</CardDescription>
+                <CardDescription className="text-xs uppercase tracking-wider font-medium">Non-Serialized Value</CardDescription>
                 <CardTitle className="text-2xl font-bold tabular-nums">
                   {loading ? "..." : formatCurrency(inventoryReport?.non_serialized_valuation)}
                 </CardTitle>
@@ -502,7 +605,7 @@ export default function ReportsPage() {
 
             <Card className="border-hairline bg-surface">
               <CardHeader className="pb-2">
-                <CardDescription className="text-xs uppercase">Low / Out of Stock</CardDescription>
+                <CardDescription className="text-xs uppercase tracking-wider font-medium">Low / Out of Stock</CardDescription>
                 <CardTitle className="text-2xl font-bold tabular-nums">
                   {loading ? "..." : (inventoryReport?.low_stock_count || 0) + (inventoryReport?.out_of_stock_count || 0)}
                 </CardTitle>
@@ -522,14 +625,15 @@ export default function ReportsPage() {
                 <CardTitle className="text-base font-semibold">Category Valuation Summary</CardTitle>
                 <CardDescription className="text-xs">Asset distribution across product categories</CardDescription>
               </CardHeader>
-              <CardContent className="p-0">
+              <CardContent className="p-0 overflow-x-auto">
                 <Table>
-                  <TableHeader>
+                  <caption className="sr-only">Category valuation summary</caption>
+                  <TableHeader className="sticky top-0 bg-surface z-10">
                     <TableRow>
-                      <TableHead>Category</TableHead>
-                      <TableHead className="text-right">Products</TableHead>
-                      <TableHead className="text-right">Units In Stock</TableHead>
-                      <TableHead className="text-right">Valuation</TableHead>
+                      <TableHead scope="col">Category</TableHead>
+                      <TableHead scope="col" className="text-right">Products</TableHead>
+                      <TableHead scope="col" className="text-right">Units In Stock</TableHead>
+                      <TableHead scope="col" className="text-right">Valuation</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -552,21 +656,22 @@ export default function ReportsPage() {
           {/* Detailed Inventory Stock Table */}
           <Card className="border-hairline">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">Inventory Valuation & Stock Table</CardTitle>
+              <CardTitle className="text-base font-semibold">Inventory Valuation &amp; Stock Table</CardTitle>
               <CardDescription className="text-xs">Derived real-time stock levels and asset values</CardDescription>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
-                <TableHeader>
+                <caption className="sr-only">Inventory valuation and stock levels</caption>
+                <TableHeader className="sticky top-0 bg-surface z-10">
                   <TableRow>
-                    <TableHead>Item</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead className="text-right">In Stock</TableHead>
-                    <TableHead className="text-right">Unit Cost</TableHead>
-                    <TableHead className="text-right">Selling Price</TableHead>
-                    <TableHead className="text-right">Valuation</TableHead>
-                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead scope="col">Item</TableHead>
+                    <TableHead scope="col">Category</TableHead>
+                    <TableHead scope="col">Type</TableHead>
+                    <TableHead scope="col" className="text-right">In Stock</TableHead>
+                    <TableHead scope="col" className="text-right">Unit Cost</TableHead>
+                    <TableHead scope="col" className="text-right">Selling Price</TableHead>
+                    <TableHead scope="col" className="text-right">Valuation</TableHead>
+                    <TableHead scope="col" className="text-center">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -581,14 +686,14 @@ export default function ReportsPage() {
                       <TableRow key={item.product_id}>
                         <TableCell className="font-medium">
                           <div>{item.name}</div>
-                          {item.sku && <div className="text-xs text-muted-foreground">{item.sku}</div>}
+                          {item.sku && <div className="text-xs text-muted-foreground tabular-nums">{item.sku}</div>}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">
                           {item.category_name || "Uncategorized"}
                         </TableCell>
                         <TableCell className="text-xs">
                           {item.is_serialized ? (
-                            <Badge variant="outline" className="font-normal text-[10px]">Serialized</Badge>
+                            <Badge variant="outline" className="font-normal text-[10px] uppercase tracking-wider">Serialized</Badge>
                           ) : (
                             <span className="text-muted-foreground">Standard</span>
                           )}
@@ -603,19 +708,25 @@ export default function ReportsPage() {
                         </TableCell>
                         <TableCell className="text-center">
                           {item.stock_status === "out_of_stock" ? (
-                            <Badge variant="destructive" className="text-[10px]">Out</Badge>
+                            <Badge variant="critical" className="text-[10px] uppercase tracking-wider">Out</Badge>
                           ) : item.stock_status === "low_stock" ? (
-                            <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">Low</Badge>
+                            <Badge variant="warning" className="text-[10px] uppercase tracking-wider">Low</Badge>
                           ) : (
-                            <Badge variant="secondary" className="text-[10px]">In Stock</Badge>
+                            <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">In Stock</Badge>
                           )}
                         </TableCell>
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-6 text-sm text-muted-foreground">
-                        No inventory records found.
+                      <TableCell colSpan={8} className="p-0 border-0">
+                        <div className="p-4">
+                          <EmptyState title="No inventory records found." description="Add products and receive stock to populate valuation.">
+                            <Link href="/products">
+                              <Button variant="outline" size="sm" className="border-hairline">Go to Products</Button>
+                            </Link>
+                          </EmptyState>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )}
@@ -632,7 +743,7 @@ export default function ReportsPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="border-hairline bg-surface">
               <CardHeader className="pb-2">
-                <CardDescription className="text-xs uppercase">Gross Revenue</CardDescription>
+                <CardDescription className="text-xs uppercase tracking-wider font-medium">Gross Revenue</CardDescription>
                 <CardTitle className="text-2xl font-bold tabular-nums">
                   {loading ? "..." : formatCurrency(profitReport?.total_revenue)}
                 </CardTitle>
@@ -644,7 +755,7 @@ export default function ReportsPage() {
 
             <Card className="border-hairline bg-surface">
               <CardHeader className="pb-2">
-                <CardDescription className="text-xs uppercase">Cost of Goods Sold (COGS)</CardDescription>
+                <CardDescription className="text-xs uppercase tracking-wider font-medium">Cost of Goods Sold (COGS)</CardDescription>
                 <CardTitle className="text-2xl font-bold tabular-nums text-muted-foreground">
                   {loading ? "..." : formatCurrency(profitReport?.total_cogs)}
                 </CardTitle>
@@ -656,7 +767,7 @@ export default function ReportsPage() {
 
             <Card className="border-hairline bg-surface">
               <CardHeader className="pb-2">
-                <CardDescription className="text-xs uppercase">Gross Profit</CardDescription>
+                <CardDescription className="text-xs uppercase tracking-wider font-medium">Gross Profit</CardDescription>
                 <CardTitle className="text-2xl font-bold tabular-nums text-foreground">
                   {loading ? "..." : formatCurrency(profitReport?.gross_profit)}
                 </CardTitle>
@@ -668,7 +779,7 @@ export default function ReportsPage() {
 
             <Card className="border-hairline bg-surface">
               <CardHeader className="pb-2">
-                <CardDescription className="text-xs uppercase">Gross Margin %</CardDescription>
+                <CardDescription className="text-xs uppercase tracking-wider font-medium">Gross Margin %</CardDescription>
                 <CardTitle className="text-2xl font-bold tabular-nums">
                   {loading ? "..." : `${parseFloat(profitReport?.gross_margin_percentage || 0).toFixed(1)}%`}
                 </CardTitle>
@@ -682,7 +793,7 @@ export default function ReportsPage() {
           {/* P&L Statement Summary Card */}
           <Card className="border-hairline">
             <CardHeader>
-              <CardTitle className="text-base font-semibold">P&L Financial Summary</CardTitle>
+              <CardTitle className="text-base font-semibold">P&amp;L Financial Summary</CardTitle>
               <CardDescription className="text-xs">Income and direct cost breakdown</CardDescription>
             </CardHeader>
             <CardContent>
@@ -719,14 +830,15 @@ export default function ReportsPage() {
                 <CardTitle className="text-base font-semibold">Top Volume Products</CardTitle>
                 <CardDescription className="text-xs">Ranked by unit sales volume</CardDescription>
               </CardHeader>
-              <CardContent className="p-0">
+              <CardContent className="p-0 overflow-x-auto">
                 <Table>
-                  <TableHeader>
+                  <caption className="sr-only">Top volume products ranked by units sold</caption>
+                  <TableHeader className="sticky top-0 bg-surface z-10">
                     <TableRow>
-                      <TableHead>Product</TableHead>
-                      <TableHead className="text-right">Units</TableHead>
-                      <TableHead className="text-right">Revenue</TableHead>
-                      <TableHead className="text-right">Profit</TableHead>
+                      <TableHead scope="col">Product</TableHead>
+                      <TableHead scope="col" className="text-right">Units</TableHead>
+                      <TableHead scope="col" className="text-right">Revenue</TableHead>
+                      <TableHead scope="col" className="text-right">Profit</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -741,7 +853,7 @@ export default function ReportsPage() {
                         <TableRow key={p.product_id}>
                           <TableCell className="font-medium">
                             <div>{p.product_name}</div>
-                            {p.sku && <div className="text-xs text-muted-foreground">{p.sku}</div>}
+                            {p.sku && <div className="text-xs text-muted-foreground tabular-nums">{p.sku}</div>}
                           </TableCell>
                           <TableCell className="text-right font-medium tabular-nums">{p.units_sold}</TableCell>
                           <TableCell className="text-right tabular-nums">{formatCurrency(p.total_revenue)}</TableCell>
@@ -752,8 +864,14 @@ export default function ReportsPage() {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center py-6 text-sm text-muted-foreground">
-                          No product sales recorded in this timeframe.
+                        <TableCell colSpan={4} className="p-0 border-0">
+                          <div className="p-4">
+                            <EmptyState title="No product sales in this timeframe." description="Adjust dates or make a sale to see performance.">
+                              <Link href="/sales">
+                                <Button variant="outline" size="sm" className="border-hairline">Go to Sales</Button>
+                              </Link>
+                            </EmptyState>
+                          </div>
                         </TableCell>
                       </TableRow>
                     )}
@@ -768,14 +886,15 @@ export default function ReportsPage() {
                 <CardTitle className="text-base font-semibold">Most Profitable Products</CardTitle>
                 <CardDescription className="text-xs">Ranked by total gross profit generated</CardDescription>
               </CardHeader>
-              <CardContent className="p-0">
+              <CardContent className="p-0 overflow-x-auto">
                 <Table>
-                  <TableHeader>
+                  <caption className="sr-only">Most profitable products ranked by gross profit</caption>
+                  <TableHeader className="sticky top-0 bg-surface z-10">
                     <TableRow>
-                      <TableHead>Product</TableHead>
-                      <TableHead className="text-right">Units</TableHead>
-                      <TableHead className="text-right">Profit</TableHead>
-                      <TableHead className="text-right">Margin %</TableHead>
+                      <TableHead scope="col">Product</TableHead>
+                      <TableHead scope="col" className="text-right">Units</TableHead>
+                      <TableHead scope="col" className="text-right">Profit</TableHead>
+                      <TableHead scope="col" className="text-right">Margin %</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -790,7 +909,7 @@ export default function ReportsPage() {
                         <TableRow key={p.product_id}>
                           <TableCell className="font-medium">
                             <div>{p.product_name}</div>
-                            {p.sku && <div className="text-xs text-muted-foreground">{p.sku}</div>}
+                            {p.sku && <div className="text-xs text-muted-foreground tabular-nums">{p.sku}</div>}
                           </TableCell>
                           <TableCell className="text-right tabular-nums">{p.units_sold}</TableCell>
                           <TableCell className="text-right font-medium tabular-nums text-foreground">
@@ -803,8 +922,10 @@ export default function ReportsPage() {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center py-6 text-sm text-muted-foreground">
-                          No profitable sales recorded.
+                        <TableCell colSpan={4} className="p-0 border-0">
+                          <div className="p-4">
+                            <EmptyState title="No profitable sales recorded." description="Margins will appear once sales with cost data exist." />
+                          </div>
                         </TableCell>
                       </TableRow>
                     )}
@@ -818,16 +939,17 @@ export default function ReportsPage() {
           {productPerfReport?.slow_moving?.length > 0 && (
             <Card className="border-hairline">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base font-semibold">Zero-Sales & Slow Moving Products</CardTitle>
+                <CardTitle className="text-base font-semibold">Zero-Sales &amp; Slow Moving Products</CardTitle>
                 <CardDescription className="text-xs">Products with 0 units sold in the selected period</CardDescription>
               </CardHeader>
-              <CardContent className="p-0">
+              <CardContent className="p-0 overflow-x-auto">
                 <Table>
-                  <TableHeader>
+                  <caption className="sr-only">Zero sales and slow moving products</caption>
+                  <TableHeader className="sticky top-0 bg-surface z-10">
                     <TableRow>
-                      <TableHead>Product</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead className="text-right">Cost Price</TableHead>
+                      <TableHead scope="col">Product</TableHead>
+                      <TableHead scope="col">Category</TableHead>
+                      <TableHead scope="col" className="text-right">Cost Price</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -835,7 +957,7 @@ export default function ReportsPage() {
                       <TableRow key={p.product_id}>
                         <TableCell className="font-medium">
                           {p.product_name}
-                          {p.sku && <span className="ml-2 text-xs text-muted-foreground">({p.sku})</span>}
+                          {p.sku && <span className="ml-2 text-xs text-muted-foreground tabular-nums">({p.sku})</span>}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">{p.category_name || "General"}</TableCell>
                         <TableCell className="text-right tabular-nums text-muted-foreground">
@@ -857,7 +979,7 @@ export default function ReportsPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Card className="border-hairline bg-surface">
               <CardHeader className="pb-2">
-                <CardDescription className="text-xs uppercase">Total Supplier Spend</CardDescription>
+                <CardDescription className="text-xs uppercase tracking-wider font-medium">Total Supplier Spend</CardDescription>
                 <CardTitle className="text-2xl font-bold tabular-nums">
                   {loading ? "..." : formatCurrency(supplierReport?.total_spent_all)}
                 </CardTitle>
@@ -869,7 +991,7 @@ export default function ReportsPage() {
 
             <Card className="border-hairline bg-surface">
               <CardHeader className="pb-2">
-                <CardDescription className="text-xs uppercase">Active Suppliers</CardDescription>
+                <CardDescription className="text-xs uppercase tracking-wider font-medium">Active Suppliers</CardDescription>
                 <CardTitle className="text-2xl font-bold tabular-nums">
                   {loading ? "..." : supplierReport?.total_suppliers_count || 0}
                 </CardTitle>
@@ -885,15 +1007,16 @@ export default function ReportsPage() {
               <CardTitle className="text-base font-semibold">Supplier Procurement Summary</CardTitle>
               <CardDescription className="text-xs">Purchasing volume and spend per supplier</CardDescription>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
-                <TableHeader>
+                <caption className="sr-only">Supplier procurement summary</caption>
+                <TableHeader className="sticky top-0 bg-surface z-10">
                   <TableRow>
-                    <TableHead>Supplier Name</TableHead>
-                    <TableHead>Phone / Email</TableHead>
-                    <TableHead className="text-right">Purchase Orders</TableHead>
-                    <TableHead className="text-right">Total Spent</TableHead>
-                    <TableHead className="text-right">Last Purchase Date</TableHead>
+                    <TableHead scope="col">Supplier Name</TableHead>
+                    <TableHead scope="col">Phone / Email</TableHead>
+                    <TableHead scope="col" className="text-right">Purchase Orders</TableHead>
+                    <TableHead scope="col" className="text-right">Total Spent</TableHead>
+                    <TableHead scope="col" className="text-right">Last Purchase Date</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -907,7 +1030,7 @@ export default function ReportsPage() {
                     supplierReport.suppliers.map((s: any) => (
                       <TableRow key={s.supplier_id}>
                         <TableCell className="font-medium">{s.supplier_name}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
+                        <TableCell className="text-xs text-muted-foreground tabular-nums">
                           {s.phone || s.email || "—"}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{s.total_purchases_count}</TableCell>
@@ -923,8 +1046,14 @@ export default function ReportsPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-6 text-sm text-muted-foreground">
-                        No suppliers or purchases found.
+                      <TableCell colSpan={5} className="p-0 border-0">
+                        <div className="p-4">
+                          <EmptyState title="No suppliers or purchases found." description="Create suppliers and receive purchase orders to see analytics.">
+                            <Link href="/suppliers">
+                              <Button variant="outline" size="sm" className="border-hairline">Go to Suppliers</Button>
+                            </Link>
+                          </EmptyState>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )}
@@ -963,61 +1092,85 @@ export default function ReportsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">
-                  {/* Window presets */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-medium text-muted-foreground">Window:</span>
-                    <div className="flex items-center gap-1 rounded-md border border-hairline bg-surface p-1">
-                      {[7, 14, 30, 60, 90].map((d) => (
-                        <button
-                          key={d}
-                          type="button"
-                          onClick={() => setIntelWindow(d)}
-                          className={`rounded px-2.5 py-1 text-xs font-medium transition-colors min-h-7 ${intelWindow === d ? "bg-background text-foreground shadow-sm border border-hairline" : "text-muted-foreground hover:text-foreground"}`}
-                        >
-                          {d}d
-                        </button>
-                      ))}
+                  {/* Window / Lead / Safety / Coverage — responsive flex-col <640, flex-row sm */}
+                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-medium">Window</Label>
+                      <div className="flex items-center gap-1 rounded-md border border-hairline bg-surface p-1 w-fit">
+                        {[7, 14, 30, 60, 90].map((d) => (
+                          <button
+                            key={d}
+                            type="button"
+                            aria-pressed={intelWindow === d}
+                            onClick={() => setIntelWindow(d)}
+                            className={`rounded px-2.5 py-1 text-xs font-medium transition-colors min-h-7 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--action-primary)] ${intelWindow === d ? "bg-background text-foreground shadow-sm border border-hairline" : "text-muted-foreground hover:text-foreground"}`}
+                          >
+                            {d}d
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <span className="text-xs text-muted-foreground ml-2">Lead</span>
-                    <Input type="number" min="1" max="90" value={intelLead} onChange={(e) => setIntelLead(e.target.value)} className="h-8 w-16 text-xs border-hairline tabular-nums" />
-                    <span className="text-xs text-muted-foreground">Safety</span>
-                    <Input type="number" min="0" max="90" value={intelSafety} onChange={(e) => setIntelSafety(e.target.value)} className="h-8 w-16 text-xs border-hairline tabular-nums" />
-                    <span className="text-xs text-muted-foreground">Coverage</span>
-                    <Input type="number" min="1" max="365" value={intelCoverage} onChange={(e) => setIntelCoverage(e.target.value)} className="h-8 w-20 text-xs border-hairline tabular-nums" />
+                    <div className="flex flex-wrap gap-2 sm:gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="intel-lead" className="text-xs font-medium">Lead (days)</Label>
+                        <Input id="intel-lead" type="number" inputMode="numeric" min="1" max="90" value={intelLead} onChange={(e) => setIntelLead(e.target.value)} className="h-8 w-20 text-xs border-hairline tabular-nums" aria-describedby="intel-lead-hint" />
+                        <span id="intel-lead-hint" className="text-[11px] text-muted-foreground">Supplier lead</span>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="intel-safety" className="text-xs font-medium">Safety (days)</Label>
+                        <Input id="intel-safety" type="number" inputMode="numeric" min="0" max="90" value={intelSafety} onChange={(e) => setIntelSafety(e.target.value)} className="h-8 w-20 text-xs border-hairline tabular-nums" aria-describedby="intel-safety-hint" />
+                        <span id="intel-safety-hint" className="text-[11px] text-muted-foreground">Buffer</span>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="intel-coverage" className="text-xs font-medium">Coverage (days)</Label>
+                        <Input id="intel-coverage" type="number" inputMode="numeric" min="1" max="365" value={intelCoverage} onChange={(e) => setIntelCoverage(e.target.value)} className="h-8 w-24 text-xs border-hairline tabular-nums" aria-describedby="intel-coverage-hint" />
+                        <span id="intel-coverage-hint" className="text-[11px] text-muted-foreground">Reorder horizon</span>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Select value={intelLocation} onValueChange={setIntelLocation}>
-                      <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Location" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All locations</SelectItem>
-                        {locations.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <Select value={intelCategory} onValueChange={setIntelCategory}>
-                      <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Category" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All categories</SelectItem>
-                        {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <Select value={intelSort} onValueChange={setIntelSort}>
-                      <SelectTrigger className="w-40 h-8 text-xs"><SelectValue placeholder="Sort" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="urgency">Urgency</SelectItem>
-                        <SelectItem value="stockout_days">Stockout soonest</SelectItem>
-                        <SelectItem value="velocity_desc">Velocity high→low</SelectItem>
-                        <SelectItem value="stock_asc">Stock low→high</SelectItem>
-                        <SelectItem value="stock_desc">Stock high→low</SelectItem>
-                        <SelectItem value="name">Name A→Z</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <div className="flex-1 min-w-40 max-w-64">
-                      <Input placeholder="Search products…" value={intelSearch} onChange={(e) => setIntelSearch(e.target.value)} className="h-8 text-xs border-hairline" />
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="intel-location" className="text-xs font-medium">Location</Label>
+                      <Select value={intelLocation} onValueChange={setIntelLocation}>
+                        <SelectTrigger id="intel-location" className="w-44 h-8 text-xs"><SelectValue placeholder="Location" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All locations</SelectItem>
+                          {locations.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="intel-category" className="text-xs font-medium">Category</Label>
+                      <Select value={intelCategory} onValueChange={setIntelCategory}>
+                        <SelectTrigger id="intel-category" className="w-44 h-8 text-xs"><SelectValue placeholder="Category" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All categories</SelectItem>
+                          {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="intel-sort" className="text-xs font-medium">Sort</Label>
+                      <Select value={intelSort} onValueChange={setIntelSort}>
+                        <SelectTrigger id="intel-sort" className="w-40 h-8 text-xs"><SelectValue placeholder="Sort" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="urgency">Urgency</SelectItem>
+                          <SelectItem value="stockout_days">Stockout soonest</SelectItem>
+                          <SelectItem value="velocity_desc">Velocity high→low</SelectItem>
+                          <SelectItem value="stock_asc">Stock low→high</SelectItem>
+                          <SelectItem value="stock_desc">Stock high→low</SelectItem>
+                          <SelectItem value="name">Name A→Z</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-1.5 flex-1 min-w-40 max-w-64">
+                      <Label htmlFor="intel-search" className="text-xs font-medium">Search</Label>
+                      <Input id="intel-search" placeholder="Search products…" value={intelSearch} onChange={(e) => setIntelSearch(e.target.value)} className="h-8 text-xs border-hairline" type="search" autoComplete="off" />
                     </div>
                   </div>
                   {intelError && (
-                    <p className="text-xs text-[var(--status-critical)] border border-hairline rounded-md p-2 bg-[var(--status-critical)]/5">{intelError}</p>
+                    <p role="alert" className="text-xs text-[var(--status-critical)] border border-hairline rounded-md p-2 bg-[var(--status-critical)]/5">{intelError}</p>
                   )}
                 </CardContent>
               </Card>
@@ -1025,19 +1178,19 @@ export default function ReportsPage() {
               {/* KPI cards */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <Card className="border-hairline bg-surface">
-                  <CardHeader className="pb-2"><CardDescription className="text-xs uppercase">Products Tracked</CardDescription><CardTitle className="text-2xl font-bold tabular-nums">{loading ? "..." : intelligence?.total_items ?? 0}</CardTitle></CardHeader>
+                  <CardHeader className="pb-2"><CardDescription className="text-xs uppercase tracking-wider font-medium">Products Tracked</CardDescription><CardTitle className="text-2xl font-bold tabular-nums">{loading ? "..." : intelligence?.total_items ?? 0}</CardTitle></CardHeader>
                   <CardContent><p className="text-xs text-muted-foreground">{intelligence ? `${intelligence.params.window_days}d window · ${intelligence.params.lead_time_days}d lead + ${intelligence.params.safety_days}d safety` : "—"}</p></CardContent>
                 </Card>
                 <Card className="border-hairline bg-surface">
-                  <CardHeader className="pb-2"><CardDescription className="text-xs uppercase">Critical</CardDescription><CardTitle className="text-2xl font-bold tabular-nums text-[var(--status-critical)]">{loading ? "..." : intelligence?.critical_count ?? 0}</CardTitle></CardHeader>
+                  <CardHeader className="pb-2"><CardDescription className="text-xs uppercase tracking-wider font-medium">Critical</CardDescription><CardTitle className="text-2xl font-bold tabular-nums text-[var(--status-critical)]">{loading ? "..." : intelligence?.critical_count ?? 0}</CardTitle></CardHeader>
                   <CardContent><p className="text-xs text-muted-foreground">≤ 50% of reorder point</p></CardContent>
                 </Card>
                 <Card className="border-hairline bg-surface">
-                  <CardHeader className="pb-2"><CardDescription className="text-xs uppercase">Low Stock</CardDescription><CardTitle className="text-2xl font-bold tabular-nums text-amber-600">{loading ? "..." : intelligence?.low_count ?? 0}</CardTitle></CardHeader>
+                  <CardHeader className="pb-2"><CardDescription className="text-xs uppercase tracking-wider font-medium">Low Stock</CardDescription><CardTitle className="text-2xl font-bold tabular-nums text-[var(--status-warning)]">{loading ? "..." : intelligence?.low_count ?? 0}</CardTitle></CardHeader>
                   <CardContent><p className="text-xs text-muted-foreground">≤ reorder point</p></CardContent>
                 </Card>
                 <Card className="border-hairline bg-surface">
-                  <CardHeader className="pb-2"><CardDescription className="text-xs uppercase">Out of Stock</CardDescription><CardTitle className="text-2xl font-bold tabular-nums">{loading ? "..." : intelligence?.out_of_stock_count ?? 0}</CardTitle></CardHeader>
+                  <CardHeader className="pb-2"><CardDescription className="text-xs uppercase tracking-wider font-medium">Out of Stock</CardDescription><CardTitle className="text-2xl font-bold tabular-nums">{loading ? "..." : intelligence?.out_of_stock_count ?? 0}</CardTitle></CardHeader>
                   <CardContent><p className="text-xs text-muted-foreground">{intelligence?.stable_count ?? 0} stable (no recent sales)</p></CardContent>
                 </Card>
               </div>
@@ -1045,29 +1198,30 @@ export default function ReportsPage() {
               {/* Intelligence Table */}
               <Card className="border-hairline">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base font-semibold">Velocity & Reorder Advisory</CardTitle>
+                  <CardTitle className="text-base font-semibold">Velocity &amp; Reorder Advisory</CardTitle>
                   <CardDescription className="text-xs">Read-only — reorder suggestion is advisory, never writes stock directly. Click Reorder to pre-fill a purchase.</CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="overflow-x-auto">
                     <Table>
-                      <TableHeader>
+                      <caption className="sr-only">Velocity and reorder advisory</caption>
+                      <TableHeader className="sticky top-0 bg-surface z-10">
                         <TableRow>
-                          <TableHead>Product</TableHead>
-                          <TableHead>Category</TableHead>
-                          <TableHead className="text-right">Current</TableHead>
-                          <TableHead className="text-right">Min</TableHead>
-                          <TableHead className="text-right">Velocity</TableHead>
-                          <TableHead className="text-right">Days Until Stockout</TableHead>
-                          <TableHead className="text-right">Reorder Point</TableHead>
-                          <TableHead className="text-right">Suggested Qty</TableHead>
-                          <TableHead className="text-center">Status</TableHead>
-                          <TableHead className="text-right">Action</TableHead>
+                          <TableHead scope="col">Product</TableHead>
+                          <TableHead scope="col">Category</TableHead>
+                          <TableHead scope="col" className="text-right">Current</TableHead>
+                          <TableHead scope="col" className="text-right">Min</TableHead>
+                          <TableHead scope="col" className="text-right">Velocity</TableHead>
+                          <TableHead scope="col" className="text-right">Days Until Stockout</TableHead>
+                          <TableHead scope="col" className="text-right">Reorder Point</TableHead>
+                          <TableHead scope="col" className="text-right">Suggested Qty</TableHead>
+                          <TableHead scope="col" className="text-center">Status</TableHead>
+                          <TableHead scope="col" className="text-right">Action</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {loading ? (
-                          <TableRow><TableCell colSpan={10} className="text-center py-6 text-sm text-muted-foreground">Computing velocity & stockout…</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={10} className="text-center py-6 text-sm text-muted-foreground">Computing velocity &amp; stockout…</TableCell></TableRow>
                         ) : intelligence?.items?.length ? (
                           intelligence.items.map((item: any) => (
                             <TableRow key={item.product_id}>
@@ -1078,8 +1232,8 @@ export default function ReportsPage() {
                               <TableCell className="text-muted-foreground text-sm">{item.category_name || "Uncategorized"}</TableCell>
                               <TableCell className="text-right font-medium tabular-nums">{item.current_stock}</TableCell>
                               <TableCell className="text-right text-muted-foreground tabular-nums">{item.minimum_stock_level}</TableCell>
-                              <TableCell className="text-right tabular-nums">{formatVelocity(item.daily_velocity)}</TableCell>
-                              <TableCell className="text-right tabular-nums text-xs">{formatStockout(item.days_until_stockout, item.estimated_stockout_date)}</TableCell>
+                              <TableCell className="text-right tabular-nums text-xs">{formatVelocityDay(item.daily_velocity)}</TableCell>
+                              <TableCell className="text-right tabular-nums text-xs">{formatStockoutShort(item.days_until_stockout, item.estimated_stockout_date)}</TableCell>
                               <TableCell className="text-right tabular-nums">{parseFloat(item.reorder_point).toFixed(2)}</TableCell>
                               <TableCell className="text-right font-semibold tabular-nums">{item.suggested_order_qty}</TableCell>
                               <TableCell className="text-center">{statusBadge(item.stock_status)}</TableCell>
@@ -1095,7 +1249,7 @@ export default function ReportsPage() {
                             </TableRow>
                           ))
                         ) : (
-                          <TableRow><TableCell colSpan={10} className="text-center py-6 text-sm text-muted-foreground">No products match the current filters.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={10} className="p-0 border-0"><div className="p-4"><EmptyState title="No products match the current filters." description="Adjust window, location, category, or search." /></div></TableCell></TableRow>
                         )}
                       </TableBody>
                     </Table>
@@ -1110,9 +1264,10 @@ export default function ReportsPage() {
                     <CardTitle className="text-base font-semibold">Category Intelligence Breakdown</CardTitle>
                     <CardDescription className="text-xs">Units and valuation per category for the filtered set</CardDescription>
                   </CardHeader>
-                  <CardContent className="p-0">
+                  <CardContent className="p-0 overflow-x-auto">
                     <Table>
-                      <TableHeader><TableRow><TableHead>Category</TableHead><TableHead className="text-right">Products</TableHead><TableHead className="text-right">Units In Stock</TableHead><TableHead className="text-right">Valuation</TableHead></TableRow></TableHeader>
+                      <caption className="sr-only">Category intelligence breakdown</caption>
+                      <TableHeader className="sticky top-0 bg-surface z-10"><TableRow><TableHead scope="col">Category</TableHead><TableHead scope="col" className="text-right">Products</TableHead><TableHead scope="col" className="text-right">Units In Stock</TableHead><TableHead scope="col" className="text-right">Valuation</TableHead></TableRow></TableHeader>
                       <TableBody>
                         {intelligence.category_breakdown.map((cat: any) => (
                           <TableRow key={cat.category_id || "uncat"}>

@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { authClient, useSession } from "@/lib/auth-client";
+import { useSession, authClient } from "@/lib/auth-client";
+import { useBusiness } from "@/components/providers/business-provider";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -38,81 +38,40 @@ import {
   HelpCircle,
 } from "lucide-react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-type Feature = { feature_key: string; enabled: boolean };
-
 export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { data: session } = useSession();
-  const [features, setFeatures] = useState<Record<string, boolean>>({});
-  const [loadingFeatures, setLoadingFeatures] = useState(true);
+  const { state: bizState, meta } = useBusiness();
+  const features = bizState.features;
+  const loadingFeatures = bizState.loading;
+  const isAdminEmail = meta.isAdminEmail;
 
-  useEffect(() => {
-    async function loadFeatures() {
-      if (!session?.session?.token || !session?.user) {
-        setLoadingFeatures(false);
-        return;
-      }
-      try {
-        const token = (session.session as unknown as { token: string }).token || "";
-        if (!token) {
-          setLoadingFeatures(false);
-          return;
-        }
-        const bizRes = await fetch(`${API_URL}/api/v1/business/`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!bizRes.ok) {
-          setLoadingFeatures(false);
-          return;
-        }
-        const businesses = await bizRes.json();
-        if (!businesses.length) {
-          setLoadingFeatures(false);
-          return;
-        }
-        const bizId = businesses[0].id;
-        const featRes = await fetch(`${API_URL}/api/v1/business/${bizId}/features`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!featRes.ok) {
-          setLoadingFeatures(false);
-          return;
-        }
-        const data = await featRes.json();
-        const map: Record<string, boolean> = {};
-        for (const f of data.features as Feature[]) map[f.feature_key] = f.enabled;
-        setFeatures(map);
-      } catch {
-        // ignore
-      } finally {
-        setLoadingFeatures(false);
-      }
-    }
-    loadFeatures();
-  }, [session]);
-
-  const navItems = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  const operations = [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }];
+  const catalog = [
     { href: "/categories", label: "Categories", icon: Tag },
     { href: "/products", label: "Products", icon: Package },
     { href: "/devices", label: "Devices", icon: Smartphone },
     { href: "/inventory", label: "Inventory", icon: Boxes },
     ...(features.multi_location ? [{ href: "/locations", label: "Locations", icon: MapPin }] : []),
     ...(features.multi_location ? [{ href: "/transfers", label: "Transfers", icon: ArrowLeftRight }] : []),
+  ];
+  const commerce = [
     { href: "/purchases", label: "Purchases", icon: ShoppingCart },
     { href: "/sales", label: "Sales", icon: Receipt },
     ...(features.customers ? [{ href: "/customers", label: "Customers", icon: Users }] : []),
     ...(features.suppliers ? [{ href: "/suppliers", label: "Suppliers", icon: Truck }] : []),
+  ];
+  const care = [
     ...(features.warranty ? [{ href: "/warranty", label: "Warranty", icon: ShieldCheck }] : []),
     ...(features.repairs ? [{ href: "/repairs", label: "Repairs", icon: Wrench }] : []),
+  ];
+  const system = [
     { href: "/reports", label: "Reports", icon: BarChart3 },
     { href: "/help", label: "Help", icon: HelpCircle },
   ];
 
-  const isAdminEmail = (session?.user?.email || "").toLowerCase() === "admin@stagcore.local";
+  const allNav = [...operations, ...catalog, ...commerce, ...care, ...system];
 
   if (isAdminEmail) {
     return (
@@ -170,41 +129,31 @@ export function AppSidebar() {
       <SidebarHeader className="border-b border-sidebar-border">
         <Link href="/dashboard" className="flex items-center gap-2 px-2 py-3">
           <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Boxes className="size-4" />
+            <Boxes className="size-4" aria-hidden="true" />
           </div>
           <span className="text-sm font-semibold tracking-tight group-data-[collapsible=icon]:hidden">Stagcore</span>
         </Link>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Operations</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {loadingFeatures ? (
-                <>
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <SidebarMenuSkeleton key={i} showIcon />
-                  ))}
-                </>
-              ) : (
-                navItems.map((item) => {
-                  const active = pathname === item.href || pathname?.startsWith(item.href + "/");
-                  const Icon = item.icon;
-                  return (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
-                        <Link href={item.href} aria-current={active ? "page" : undefined}>
-                          <Icon />
-                          <span>{item.label}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })
-              )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {loadingFeatures ? (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {Array.from({ length: allNav.length || 9 }).map((_, i) => (
+                  <SidebarMenuSkeleton key={i} showIcon />
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : (
+          <>
+            <SidebarNavGroup label="Operations" items={operations} pathname={pathname} />
+            <SidebarNavGroup label="Catalog" items={catalog} pathname={pathname} />
+            <SidebarNavGroup label="Commerce" items={commerce} pathname={pathname} />
+            {care.length ? <SidebarNavGroup label="Care" items={care} pathname={pathname} /> : null}
+            <SidebarNavGroup label="System" items={system} pathname={pathname} />
+          </>
+        )}
       </SidebarContent>
       <SidebarFooter className="border-t border-sidebar-border">
         <div className="flex flex-col gap-2 p-2">
@@ -226,5 +175,40 @@ export function AppSidebar() {
         </div>
       </SidebarFooter>
     </Sidebar>
+  );
+}
+
+function SidebarNavGroup({
+  label,
+  items,
+  pathname,
+}: {
+  label: string;
+  items: { href: string; label: string; icon: React.ElementType }[];
+  pathname: string | null;
+}) {
+  if (!items.length) return null;
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">{label}</SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {items.map((item) => {
+            const active = pathname === item.href || pathname?.startsWith(item.href + "/");
+            const Icon = item.icon;
+            return (
+              <SidebarMenuItem key={item.href}>
+                <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
+                  <Link href={item.href} aria-current={active ? "page" : undefined}>
+                    <Icon aria-hidden="true" />
+                    <span>{item.label}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
   );
 }

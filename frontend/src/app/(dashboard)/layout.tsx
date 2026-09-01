@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, ScanLine, X } from "lucide-react";
 import { BusinessProvider, useBusiness } from "@/components/providers/business-provider";
+import { ChatWidget } from "@/components/chat/chat-widget";
 import { API_URL } from "@/lib/fetch-with-auth";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -139,6 +140,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         </header>
         <main className="flex-1 p-4 sm:p-6">{children}</main>
       </SidebarInset>
+      <ChatWidget />
     </SidebarProvider>
   );
 }

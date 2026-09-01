@@ -5,6 +5,7 @@ from app.api.v1 import (
     auth,
     business,
     categories,
+    chat,
     customers,
     dashboard,
     device_history,
@@ -47,5 +48,6 @@ api_router.include_router(returns.router, prefix="/returns", tags=["returns"])
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 api_router.include_router(reports.router, prefix="/reports", tags=["reports"])
 api_router.include_router(intelligence.router, prefix="/intelligence", tags=["intelligence"])
+api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 

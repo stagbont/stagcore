@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     platform_admin_emails: str = "admin@stagcore.local"
     app_env: str = "development"
     cors_origins: str = "http://localhost:3000"
+    openrouter_api_key: str = ""
+    openrouter_model: str = "z-ai/glm-5.2:free"
+    openrouter_site_url: str = "http://localhost:3000"
+    openrouter_app_name: str = "Stagcore"
 
     @property
     def is_sqlite(self) -> bool:

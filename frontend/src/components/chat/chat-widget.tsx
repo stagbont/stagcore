@@ -214,7 +214,21 @@ export function ChatWidget() {
           {/* Error */}
           {error && (
             <div className="mx-3 mb-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive" role="alert">
-              {error}
+              <span>{error}</span>
+              {(error.toLowerCase().includes("rate limit") || error.includes("openrouter/free") || error.includes("tried")) && (
+                <span className="mt-1 block">
+                  Browse free models at{" "}
+                  <a
+                    href="https://openrouter.ai/models?pricing=free"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-2 hover:text-destructive/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-destructive"
+                  >
+                    openrouter.ai/models?pricing=free
+                  </a>
+                  {" "}— free tiers have low daily limits, not for production.
+                </span>
+              )}
             </div>
           )}
 

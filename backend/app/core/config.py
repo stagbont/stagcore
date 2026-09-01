@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     openrouter_api_key: str = ""
     openrouter_model: str = "z-ai/glm-5.2:free"
+    openrouter_fallback_model: str = "openrouter/free"
     openrouter_site_url: str = "http://localhost:3000"
     openrouter_app_name: str = "Stagcore"
 

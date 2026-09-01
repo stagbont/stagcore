@@ -310,32 +310,67 @@ async def chat_endpoint(
         "Content-Type": "application/json",
     }
 
-    # Helper to call OpenRouter non-streaming
-    async def call_openrouter(messages: list[dict]) -> dict:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                OPENROUTER_URL,
-                headers=headers,
-                json={
-                    "model": settings.openrouter_model,
-                    "messages": messages,
-                    "tools": tools,
-                    "tool_choice": "auto",
-                    "max_tokens": 1024,
-                    "temperature": 0.4,
-                },
-            )
-            if resp.status_code == 429:
-                raise HTTPException(status_code=503, detail="OpenRouter rate limited — try again shortly")
-            if resp.status_code >= 400:
-                # Surface provider error safely
-                detail = resp.text[:500]
-                raise HTTPException(status_code=502, detail=f"OpenRouter error {resp.status_code}: {detail}")
-            return resp.json()
+    # Ordered models: primary :free variant, then Free Models Router fallback
+    _primary = (settings.openrouter_model or "").strip()
+    _fallback = (getattr(settings, "openrouter_fallback_model", "") or "").strip()
+    _models: list[str] = []
+    if _primary:
+        _models.append(_primary)
+    if _fallback and _fallback not in _models:
+        _models.append(_fallback)
+    if not _models:
+        _models = ["openrouter/free"]
+
+    # Helper to call OpenRouter non-streaming with automatic fallback
+    # Returns (response_json, used_model)
+    async def call_openrouter(messages: list[dict]) -> tuple[dict, str]:
+        last_exc: HTTPException | None = None
+        for idx, mdl in enumerate(_models):
+            is_last = idx == len(_models) - 1
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    OPENROUTER_URL,
+                    headers=headers,
+                    json={
+                        "model": mdl,
+                        "messages": messages,
+                        "tools": tools,
+                        "tool_choice": "auto",
+                        "max_tokens": 1024,
+                        "temperature": 0.4,
+                    },
+                )
+                if resp.status_code == 200:
+                    return resp.json(), mdl
+                # Retryable: rate limit or model not found / unavailable
+                body_lower = resp.text.lower()[:500]
+                is_not_found = resp.status_code in (404, 401) or (resp.status_code == 400 and ("not found" in body_lower or "no endpoints" in body_lower))
+                is_rate_limited = resp.status_code == 429 or "rate limit" in body_lower or "free-models-per-day" in body_lower
+                if (is_rate_limited or is_not_found) and not is_last:
+                    # Try next model (fallback router)
+                    last_exc = HTTPException(status_code=503, detail=f"OpenRouter {resp.status_code} on {mdl}, trying fallback")
+                    continue
+                if is_rate_limited:
+                    detail = f"Free model rate limit — tried {', '.join(_models)}. Try again tomorrow or set a paid model. Browse https://openrouter.ai/models?pricing=free"
+                    if resp.headers.get("Retry-After"):
+                        detail += f" (Retry-After: {resp.headers['Retry-After']}s)"
+                    raise HTTPException(status_code=503, detail=detail)
+                if resp.status_code >= 400:
+                    # Surface provider error safely, include tried list if multiple models
+                    detail = resp.text[:500]
+                    suffix = f" (tried {', '.join(_models)})" if len(_models) > 1 else ""
+                    raise HTTPException(status_code=502, detail=f"OpenRouter error {resp.status_code}: {detail}{suffix}")
+                # Unexpected — treat as error
+                raise HTTPException(status_code=502, detail=f"OpenRouter unexpected status {resp.status_code}")
+        # Should not reach here; raise last captured or generic
+        if last_exc:
+            raise last_exc
+        raise HTTPException(status_code=502, detail="OpenRouter request failed")
 
     # First call to see if tools needed
+    used_model: str = _models[0] if _models else settings.openrouter_model
     try:
-        data = await call_openrouter(msgs)
+        data, used_model = await call_openrouter(msgs)
     except HTTPException:
         raise
     except Exception as e:
@@ -362,7 +397,7 @@ async def chat_endpoint(
             msgs.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": result})
         # Second call for final answer
         try:
-            data2 = await call_openrouter(msgs)
+            data2, used_model = await call_openrouter(msgs)
         except HTTPException:
             raise
         except Exception as e:
@@ -378,7 +413,7 @@ async def chat_endpoint(
     final_content = final_content[:6000]
 
     if not payload.stream:
-        return JSONResponse({"role": "assistant", "content": final_content, "model": settings.openrouter_model})
+        return JSONResponse({"role": "assistant", "content": final_content, "model": used_model})
 
     # Stream as SSE-style chunks (pseudo-streaming by words to keep widget UX streaming)
     async def event_gen():

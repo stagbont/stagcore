@@ -7,7 +7,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import OWNER_MANAGER_CLERK, get_current_user, require_business_roles
 from app.models.product import Product
 from app.schemas.product import ProductCreate, ProductResponse, ProductUpdate
 
@@ -72,6 +72,7 @@ async def create_product(
     db: AsyncSession = Depends(get_db),
 ):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CLERK)
     await _validate_refs(db, bid, payload.category_id, payload.supplier_id)
     if payload.sku:
         existing = await db.execute(select(Product).where(Product.business_id == bid, Product.sku == payload.sku))
@@ -123,6 +124,7 @@ async def update_product(product_id: str, payload: ProductUpdate, current_user: 
     allowed = {m["business_id"] for m in current_user.get("memberships", [])}
     if prod.business_id not in allowed:
         raise HTTPException(status_code=403, detail="Not a member of this business")
+    require_business_roles(prod.business_id, current_user, OWNER_MANAGER_CLERK)
     # Validate refs if changing
     await _validate_refs(db, prod.business_id, payload.category_id, payload.supplier_id)
     if payload.sku is not None and payload.sku != prod.sku:
@@ -153,5 +155,6 @@ async def delete_product(product_id: str, current_user: dict = Depends(get_curre
     allowed = {m["business_id"] for m in current_user.get("memberships", [])}
     if prod.business_id not in allowed:
         raise HTTPException(status_code=403, detail="Not a member of this business")
+    require_business_roles(prod.business_id, current_user, OWNER_MANAGER_CLERK)
     await db.delete(prod)
     await db.commit()

@@ -36,6 +36,7 @@ import {
   BarChart3,
   Building2,
   HelpCircle,
+  UserCog,
 } from "lucide-react";
 
 export function AppSidebar() {
@@ -46,30 +47,88 @@ export function AppSidebar() {
   const features = bizState.features;
   const loadingFeatures = bizState.loading;
   const isAdminEmail = meta.isAdminEmail;
+  const role = bizState.role ?? meta.currentRole ?? null;
+  const isOwner = role === "OWNER";
+  const isManager = role === "MANAGER";
+  const isCashier = role === "CASHIER";
+  const isClerk = role === "INVENTORY_CLERK";
+  const isOwnerManager = isOwner || isManager;
 
+  // Role-based nav: OWNER/MANAGER see all, CASHIER strict (Sales+Inventory view+Team read-only), CLERK inventory+catalog+purchase
   const operations = [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }];
-  const catalog = [
-    { href: "/categories", label: "Categories", icon: Tag },
-    { href: "/products", label: "Products", icon: Package },
-    { href: "/devices", label: "Devices", icon: Smartphone },
-    { href: "/inventory", label: "Inventory", icon: Boxes },
-    ...(features.multi_location ? [{ href: "/locations", label: "Locations", icon: MapPin }] : []),
-    ...(features.multi_location ? [{ href: "/transfers", label: "Transfers", icon: ArrowLeftRight }] : []),
-  ];
-  const commerce = [
-    { href: "/purchases", label: "Purchases", icon: ShoppingCart },
-    { href: "/sales", label: "Sales", icon: Receipt },
-    ...(features.customers ? [{ href: "/customers", label: "Customers", icon: Users }] : []),
-    ...(features.suppliers ? [{ href: "/suppliers", label: "Suppliers", icon: Truck }] : []),
-  ];
-  const care = [
-    ...(features.warranty ? [{ href: "/warranty", label: "Warranty", icon: ShieldCheck }] : []),
-    ...(features.repairs ? [{ href: "/repairs", label: "Repairs", icon: Wrench }] : []),
-  ];
-  const system = [
-    { href: "/reports", label: "Reports", icon: BarChart3 },
-    { href: "/help", label: "Help", icon: HelpCircle },
-  ];
+
+  const catalogByRole = (() => {
+    if (!role || isOwnerManager) {
+      return [
+        { href: "/categories", label: "Categories", icon: Tag },
+        { href: "/products", label: "Products", icon: Package },
+        { href: "/devices", label: "Devices", icon: Smartphone },
+        { href: "/inventory", label: "Inventory", icon: Boxes },
+        ...(features.multi_location ? [{ href: "/locations", label: "Locations", icon: MapPin }] : []),
+        ...(features.multi_location ? [{ href: "/transfers", label: "Transfers", icon: ArrowLeftRight }] : []),
+      ];
+    }
+    if (isCashier) {
+      return [{ href: "/inventory", label: "Inventory", icon: Boxes }];
+    }
+    if (isClerk) {
+      return [
+        { href: "/categories", label: "Categories", icon: Tag },
+        { href: "/products", label: "Products", icon: Package },
+        { href: "/devices", label: "Devices", icon: Smartphone },
+        { href: "/inventory", label: "Inventory", icon: Boxes },
+        ...(features.multi_location ? [{ href: "/locations", label: "Locations", icon: MapPin }] : []),
+        ...(features.multi_location ? [{ href: "/transfers", label: "Transfers", icon: ArrowLeftRight }] : []),
+      ];
+    }
+    return [];
+  })();
+  const catalog = catalogByRole;
+
+  const commerceByRole = (() => {
+    if (!role || isOwnerManager) {
+      return [
+        { href: "/purchases", label: "Purchases", icon: ShoppingCart },
+        { href: "/sales", label: "Sales", icon: Receipt },
+        ...(features.customers ? [{ href: "/customers", label: "Customers", icon: Users }] : []),
+        ...(features.suppliers ? [{ href: "/suppliers", label: "Suppliers", icon: Truck }] : []),
+      ];
+    }
+    if (isCashier) {
+      return [{ href: "/sales", label: "Sales", icon: Receipt }];
+    }
+    if (isClerk) {
+      return [
+        { href: "/purchases", label: "Purchases", icon: ShoppingCart },
+        ...(features.suppliers ? [{ href: "/suppliers", label: "Suppliers", icon: Truck }] : []),
+      ];
+    }
+    return [];
+  })();
+  const commerce = commerceByRole;
+
+  const careByRole = (() => {
+    if (!role || isOwnerManager) {
+      return [
+        ...(features.warranty ? [{ href: "/warranty", label: "Warranty", icon: ShieldCheck }] : []),
+        ...(features.repairs ? [{ href: "/repairs", label: "Repairs", icon: Wrench }] : []),
+      ];
+    }
+    return [];
+  })();
+  const care = careByRole;
+
+  const systemByRole = (() => {
+    const base: { href: string; label: string; icon: typeof HelpCircle }[] = [
+      { href: "/team", label: "Team", icon: UserCog },
+      { href: "/help", label: "Help", icon: HelpCircle },
+    ];
+    if (!role || isOwnerManager) {
+      base.splice(1, 0, { href: "/reports", label: "Reports", icon: BarChart3 });
+    }
+    return base;
+  })();
+  const system = systemByRole;
 
   const allNav = [...operations, ...catalog, ...commerce, ...care, ...system];
 
@@ -160,6 +219,7 @@ export function AppSidebar() {
           <div className="px-2 py-1 group-data-[collapsible=icon]:hidden">
             <p className="text-sm font-medium truncate">{session?.user?.name || "—"}</p>
             <p className="text-xs text-muted-foreground truncate">{session?.user?.email || ""}</p>
+            {role ? <p className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">{role.replace("_", " ")}</p> : null}
           </div>
           <Separator className="group-data-[collapsible=icon]:hidden" />
           <Button

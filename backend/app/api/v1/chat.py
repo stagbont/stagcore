@@ -79,7 +79,7 @@ def _build_system_prompt(business_name: str) -> str:
         "- Keep answers concise (2-4 sentences) and tenant-scoped to this business only.\n"
         "- Cite tutorial route when answering 'how do I…?' (e.g. See /sales, /inventory).\n"
         "- Do not invent business data outside tool results.\n"
-        "- Use tabular numbers style when showing prices (e.g. $1,299.00).\n"
+        "- Use tabular numbers style when showing prices (e.g. GH₵1,299.00).\n"
         f"- Today is {datetime.now(timezone.utc).date().isoformat()}.\n"
         "Available help tutorials: " + ", ".join(f"{t['title']} ({t['route']})" for t in TUTORIAL_INDEX)
     )

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import OWNER_MANAGER, OWNER_MANAGER_CLERK, get_current_user, require_business_roles
 from app.schemas.report import (
     InventoryReportResponse,
     ProductPerformanceReportResponse,
@@ -59,6 +59,7 @@ async def get_sales_report(
     db: AsyncSession = Depends(get_db),
 ):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER)
     start_dt, end_dt = _parse_date_range(start_date, end_date)
     return await ReportService.get_sales_report(db, bid, start_dt, end_dt, location_id=location_id)
 
@@ -72,6 +73,7 @@ async def get_inventory_report(
     db: AsyncSession = Depends(get_db),
 ):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CLERK)
     return await ReportService.get_inventory_report(db, bid, location_id=location_id, category_id=category_id)
 
 
@@ -84,6 +86,7 @@ async def get_profit_report(
     db: AsyncSession = Depends(get_db),
 ):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER)
     start_dt, end_dt = _parse_date_range(start_date, end_date)
     return await ReportService.get_profit_report(db, bid, start_dt, end_dt)
 
@@ -97,6 +100,7 @@ async def get_product_performance_report(
     db: AsyncSession = Depends(get_db),
 ):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER)
     start_dt, end_dt = _parse_date_range(start_date, end_date)
     return await ReportService.get_product_performance(db, bid, start_dt, end_dt)
 
@@ -108,4 +112,5 @@ async def get_supplier_report(
     db: AsyncSession = Depends(get_db),
 ):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER)
     return await ReportService.get_supplier_report(db, bid)

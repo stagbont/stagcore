@@ -8,9 +8,13 @@ type Business = { id: string; name: string; slug: string };
 
 type FeatureEntry = { feature_key: string; enabled: boolean };
 
+type Membership = { business_id: string; role: string };
+
 type BusinessState = {
   business: Business | null;
   features: Record<string, boolean>;
+  role: string | null;
+  memberships: Membership[];
   loading: boolean;
   error: string | null;
 };
@@ -21,6 +25,7 @@ type BusinessActions = {
 
 type BusinessMeta = {
   isAdminEmail: boolean;
+  currentRole: string | null;
 };
 
 type BusinessContextValue = {
@@ -48,6 +53,8 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = React.useState<BusinessState>({
     business: null,
     features: {},
+    role: null,
+    memberships: [],
     loading: true,
     error: null,
   });
@@ -62,27 +69,42 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
       const bizRes = await fetchWithAuth("/api/v1/business/", token);
       if (!bizRes.ok) {
         const text = await bizRes.text();
-        setState({ business: null, features: {}, loading: false, error: text });
+        setState({ business: null, features: {}, role: null, memberships: [], loading: false, error: text });
         return;
       }
       const businesses = (await bizRes.json()) as Business[];
       if (!businesses.length) {
-        setState({ business: null, features: {}, loading: false, error: null });
+        setState({ business: null, features: {}, role: null, memberships: [], loading: false, error: null });
         return;
       }
       const business = businesses[0];
+
+      // Fetch memberships/role via auth session
+      let memberships: Membership[] = [];
+      let role: string | null = null;
+      try {
+        const sessRes = await fetchWithAuth("/api/v1/auth/session", token);
+        if (sessRes.ok) {
+          const sessData = (await sessRes.json()) as { memberships?: Membership[] };
+          memberships = sessData.memberships ?? [];
+          const match = memberships.find((m) => m.business_id === business.id);
+          role = match?.role ?? (memberships[0]?.role ?? null);
+        }
+      } catch {
+        // ignore, role stays null
+      }
 
       // Platform admin or missing business: features fetch is secondary
       const featRes = await fetchWithAuth(`/api/v1/business/${business.id}/features`, token);
       if (!featRes.ok) {
         // If features fetch fails (e.g. 403), keep business but empty features
-        setState({ business, features: {}, loading: false, error: null });
+        setState({ business, features: {}, role, memberships, loading: false, error: null });
         return;
       }
       const data = (await featRes.json()) as { features: FeatureEntry[] };
       const features: Record<string, boolean> = {};
       for (const f of data.features ?? []) features[f.feature_key] = f.enabled;
-      setState({ business, features, loading: false, error: null });
+      setState({ business, features, role, memberships, loading: false, error: null });
     } catch (e) {
       setState((prev) => ({
         ...prev,
@@ -100,7 +122,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     () => ({
       state,
       actions: { refresh },
-      meta: { isAdminEmail },
+      meta: { isAdminEmail, currentRole: state.role },
     }),
     [state, refresh, isAdminEmail]
   );
@@ -122,4 +144,14 @@ export function useBusinessOptional(): BusinessContextValue | null {
 export function useBusinessId(): string | null {
   const ctx = React.useContext(BusinessContext);
   return ctx?.state.business?.id ?? null;
+}
+
+export function useCurrentRole(): string | null {
+  const ctx = React.useContext(BusinessContext);
+  return ctx?.state.role ?? ctx?.meta.currentRole ?? null;
+}
+
+export function hasRole(role: string | null, allowed: string[]): boolean {
+  if (!role) return false;
+  return allowed.includes(role);
 }

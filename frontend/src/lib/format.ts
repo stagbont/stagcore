@@ -2,18 +2,18 @@
 // Uses Intl.* per Web Interface Guidelines (locale & i18n), falls back to plain text.
 
 export function formatCurrency(val?: string | number | null): string {
-  if (val === undefined || val === null || val === "") return "$0.00";
+  if (val === undefined || val === null || val === "") return "GH₵0.00";
   const n = typeof val === "number" ? val : parseFloat(String(val));
-  if (Number.isNaN(n)) return "$0.00";
+  if (Number.isNaN(n)) return "GH₵0.00";
   try {
-    return new Intl.NumberFormat("en-US", {
+    return new Intl.NumberFormat("en-GH", {
       style: "currency",
-      currency: "USD",
+      currency: "GHS",
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(n);
   } catch {
-    return `$${n.toFixed(2)}`;
+    return `GH₵${n.toFixed(2)}`;
   }
 }
 
@@ -22,7 +22,7 @@ export function formatDate(iso?: string | null): string {
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
-    return new Intl.DateTimeFormat("en-US", {
+    return new Intl.DateTimeFormat("en-GH", {
       month: "short",
       day: "numeric",
       year: "numeric",
@@ -37,7 +37,7 @@ export function formatDateTime(iso?: string | null): string {
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
-    return new Intl.DateTimeFormat("en-US", {
+    return new Intl.DateTimeFormat("en-GH", {
       month: "short",
       day: "numeric",
       hour: "2-digit",

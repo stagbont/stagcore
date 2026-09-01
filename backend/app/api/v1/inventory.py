@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import OWNER_MANAGER_CLERK, get_current_user, require_business_roles
 from app.models.inventory import InventoryMovement
 from app.schemas.inventory import AdjustRequest, DeviceStatusChange, MovementResponse, ReceiveRequest, ReturnRequest, SellRequest, StockResponse
 from app.services.inventory import InventoryService
@@ -28,6 +28,7 @@ def _get_business_id(current_user: dict, business_id: str | None = None) -> str:
 @router.post("/receive", response_model=MovementResponse, status_code=status.HTTP_201_CREATED)
 async def receive_stock(payload: ReceiveRequest, business_id: Annotated[str | None, Query()] = None, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CLERK)
     try:
         mv = await InventoryService.receive_stock(db, bid, payload.product_id, payload.quantity, payload.unit_cost, payload.location_id, payload.reference, payload.notes, current_user["id"])
         await db.commit()
@@ -40,6 +41,7 @@ async def receive_stock(payload: ReceiveRequest, business_id: Annotated[str | No
 @router.post("/sell", response_model=MovementResponse, status_code=status.HTTP_201_CREATED)
 async def sell_stock(payload: SellRequest, business_id: Annotated[str | None, Query()] = None, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CLERK)
     try:
         mv = await InventoryService.sell_stock(db, bid, payload.product_id, payload.quantity, payload.location_id, payload.reference, payload.notes, current_user["id"])
         await db.commit()
@@ -52,6 +54,7 @@ async def sell_stock(payload: SellRequest, business_id: Annotated[str | None, Qu
 @router.post("/adjust", response_model=MovementResponse, status_code=status.HTTP_201_CREATED)
 async def adjust_stock(payload: AdjustRequest, business_id: Annotated[str | None, Query()] = None, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CLERK)
     try:
         mv = await InventoryService.adjust_stock(db, bid, payload.product_id, payload.quantity, payload.direction, payload.location_id, payload.reference, payload.notes, current_user["id"])
         await db.commit()
@@ -64,6 +67,7 @@ async def adjust_stock(payload: AdjustRequest, business_id: Annotated[str | None
 @router.post("/return", response_model=MovementResponse, status_code=status.HTTP_201_CREATED)
 async def return_stock(payload: ReturnRequest, business_id: Annotated[str | None, Query()] = None, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CLERK)
     try:
         mv = await InventoryService.return_stock(db, bid, payload.product_id, payload.quantity, payload.kind, payload.location_id, payload.reference, payload.notes, current_user["id"])
         await db.commit()
@@ -76,6 +80,7 @@ async def return_stock(payload: ReturnRequest, business_id: Annotated[str | None
 @router.post("/device-status", response_model=MovementResponse, status_code=status.HTTP_201_CREATED)
 async def change_device_status(payload: DeviceStatusChange, business_id: Annotated[str | None, Query()] = None, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CLERK)
     try:
         mv = await InventoryService.record_device_movement(db, bid, payload.device_id, payload.to_status, payload.location_id, payload.reference, payload.notes, current_user["id"])
         await db.commit()

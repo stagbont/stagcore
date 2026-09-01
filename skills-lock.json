@@ -13,6 +13,12 @@
       "skillPath": "better-auth/best-practices/SKILL.md",
       "computedHash": "61ba0ef64ed2e7c424401cc848ca33dd6d790a720c44727717dc0c5cba5fc122"
     },
+    "copywriting": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/copywriting/SKILL.md",
+      "computedHash": "779f05c8be67da475e6a7af78de3e0400b0038e371ce898dd6ff9d3331aab7db"
+    },
     "fastapi-templates": {
       "source": "wshobson/agents",
       "sourceType": "github",
@@ -66,6 +72,12 @@
       "sourceType": "github",
       "skillPath": "plugins/database-design/skills/postgresql/SKILL.md",
       "computedHash": "dcace78e5cef7d8dce8ffef7ebee146e6c83a438aa4cf80bf502730e870c02d4"
+    },
+    "presentation": {
+      "source": "iii-hq/iii",
+      "sourceType": "github",
+      "skillPath": "skills/presentation/SKILL.md",
+      "computedHash": "90e76762cb01d118b58c5951c6552d4b8d6d5fc25764aa357cb46f6369ab86f2"
     },
     "pytest-coverage": {
       "source": "github/awesome-copilot",

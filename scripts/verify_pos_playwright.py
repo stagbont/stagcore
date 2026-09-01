@@ -305,7 +305,7 @@ async def browser_checks():
             await page.click('button:has-text("Add Item")')
             await page.wait_for_timeout(600)
             cart_body = await page.locator('[role="dialog"]').inner_text()
-            assert "39.99" in cart_body or "$" in cart_body, f"cart total not shown after product add: {cart_body[:500]}"
+            assert "39.99" in cart_body or "GH₵" in cart_body or "$" in cart_body, f"cart total not shown after product add: {cart_body[:500]}"
             print("✓ product line added to cart")
             # Switch to device mode
             # Change mode via select trigger

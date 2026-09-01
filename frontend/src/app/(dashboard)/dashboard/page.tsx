@@ -85,6 +85,10 @@ export default function DashboardPage() {
   const { state: bizState } = useBusiness();
   const business = bizState.business;
   const businessId = business?.id ?? null;
+  const role = bizState.role ?? null;
+  const isCashier = role === "CASHIER";
+  const isClerk = role === "INVENTORY_CLERK";
+  const isOwnerManager = role === "OWNER" || role === "MANAGER" || !role;
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [intelligenceMap, setIntelligenceMap] = useState<Record<string, IntelligenceItem>>({});
@@ -217,25 +221,49 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            <Card className="border-border bg-surface">
-              <CardHeader className="pb-2">
-                <CardDescription className="text-xs uppercase tracking-wider font-medium">Today&apos;s Gross Profit</CardDescription>
-                <CardTitle className="text-2xl font-bold tabular-nums">{formatCurrency(summary?.today_gross_profit)}</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <p className="text-xs text-muted-foreground">Derived post COGS deduction</p>
-              </CardContent>
-            </Card>
+            {isOwnerManager ? (
+              <Card className="border-border bg-surface">
+                <CardHeader className="pb-2">
+                  <CardDescription className="text-xs uppercase tracking-wider font-medium">Today&apos;s Gross Profit</CardDescription>
+                  <CardTitle className="text-2xl font-bold tabular-nums">{formatCurrency(summary?.today_gross_profit)}</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-xs text-muted-foreground">Derived post COGS deduction</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="border-border bg-surface opacity-60">
+                <CardHeader className="pb-2">
+                  <CardDescription className="text-xs uppercase tracking-wider font-medium">Today&apos;s Gross Profit</CardDescription>
+                  <CardTitle className="text-2xl font-bold tabular-nums">—</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-xs text-muted-foreground">Owner/Manager only</p>
+                </CardContent>
+              </Card>
+            )}
 
-            <Card className="border-border bg-surface">
-              <CardHeader className="pb-2">
-                <CardDescription className="text-xs uppercase tracking-wider font-medium">Total Inventory Valuation</CardDescription>
-                <CardTitle className="text-2xl font-bold tabular-nums">{formatCurrency(summary?.total_inventory_value)}</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <p className="text-xs text-muted-foreground">{summary ? `${summary.total_products_count} active items & devices` : "—"}</p>
-              </CardContent>
-            </Card>
+            {!isCashier ? (
+              <Card className="border-border bg-surface">
+                <CardHeader className="pb-2">
+                  <CardDescription className="text-xs uppercase tracking-wider font-medium">Total Inventory Valuation</CardDescription>
+                  <CardTitle className="text-2xl font-bold tabular-nums">{formatCurrency(summary?.total_inventory_value)}</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-xs text-muted-foreground">{summary ? `${summary.total_products_count} active items & devices` : "—"}</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="border-border bg-surface opacity-60">
+                <CardHeader className="pb-2">
+                  <CardDescription className="text-xs uppercase tracking-wider font-medium">Total Inventory Valuation</CardDescription>
+                  <CardTitle className="text-2xl font-bold tabular-nums">—</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-xs text-muted-foreground">Owner/Manager/Clerk only</p>
+                </CardContent>
+              </Card>
+            )}
 
             <Card className="border-border bg-surface">
               <CardHeader className="pb-2">

@@ -79,7 +79,7 @@ export const tutorials: Tutorial[] = [
     flag: null,
     estimatedMinutes: 4,
     prerequisites: ["quick-start"],
-    route: "/dashboard",
+    route: "/team",
     sections: [
       { heading: "Goal", body: "Know who can do what, and how multi-tenancy keeps your data isolated." },
       {
@@ -93,8 +93,17 @@ export const tutorials: Tutorial[] = [
         ],
       },
       {
+        heading: "Manage your team",
+        body: "Open Team from the sidebar (System group). Only Owners can add, edit roles, or remove members. All prices display in GH₵.",
+        steps: [
+          { title: "Add a member", detail: "Click Add Member, enter Name, Email, Password (min 8), and Role. Creating also creates their Better Auth login — they can sign in immediately at /login.", uiAnchor: "Team → Add Member → Name / Email / Password / Role" },
+          { title: "Change a role", detail: "Click Edit Role on a row, pick Owner / Manager / Cashier / Inventory Clerk, and Save. The last Owner cannot be demoted.", uiAnchor: "Team table → Edit Role" },
+          { title: "Remove a member", detail: "Click Remove and confirm. The last Owner cannot be removed. Removed users keep their login but lose business access.", uiAnchor: "Team table → Remove" },
+        ],
+      },
+      {
         heading: "Next steps",
-        body: "User management UI is coming to the dashboard. Today roles are assigned at registration (Owner) and via Better Auth session. Keep one Owner email as your primary login and share Cashier logins per counter.",
+        body: "Keep one Owner email as your primary login and create Cashier logins per counter. Cashiers see Team read-only and sell via POS.",
       },
     ],
     troubleshooting: [{ q: "A Cashier can see costs", a: "Check the role in BusinessUser. Only Owner and Manager are permitted to view profit/cost. Reassign the user to CASHIER." }],

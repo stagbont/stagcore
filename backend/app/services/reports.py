@@ -222,7 +222,7 @@ class ReportService:
                     id=f"sale_{s.id}",
                     activity_type="sale",
                     title=f"Sale Completed ({s.payment_method.replace('_', ' ').capitalize()})",
-                    description=f"Transaction total: ${s.total_amount:.2f}",
+                    description=f"Transaction total: GH₵{s.total_amount:.2f}",
                     amount=s.total_amount,
                     timestamp=s.sale_date,
                 )
@@ -255,7 +255,7 @@ class ReportService:
                     id=f"purchase_{p.id}",
                     activity_type="purchase",
                     title=f"Purchase {p.status.capitalize()}{supp_label}",
-                    description=f"PO total: ${tot:.2f}",
+                    description=f"PO total: GH₵{tot:.2f}",
                     amount=tot,
                     timestamp=p.purchase_date,
                 )

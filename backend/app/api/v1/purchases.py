@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import OWNER_MANAGER_CLERK, get_current_user, require_business_roles
 from app.models.purchase import Purchase, PurchaseItem
 from app.schemas.purchase import PurchaseCreate, PurchaseResponse, PurchaseUpdate
 from app.services.purchasing import PurchasingService
@@ -35,6 +35,7 @@ async def list_purchases(
     db: AsyncSession = Depends(get_db),
 ):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CLERK)
     query = select(Purchase).where(Purchase.business_id == bid).order_by(Purchase.purchase_date.desc())
     if status_filter:
         query = query.where(Purchase.status == status_filter)
@@ -72,6 +73,7 @@ async def list_purchases(
 @router.post("", response_model=PurchaseResponse, status_code=status.HTTP_201_CREATED)
 async def create_purchase(payload: PurchaseCreate, business_id: Annotated[str | None, Query()] = None, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CLERK)
     try:
         purchase = await PurchasingService.create_purchase(db, bid, payload, current_user["id"])
         await db.commit()
@@ -103,6 +105,7 @@ async def create_purchase(payload: PurchaseCreate, business_id: Annotated[str | 
 @router.get("/{purchase_id}", response_model=PurchaseResponse)
 async def get_purchase(purchase_id: str, business_id: Annotated[str | None, Query()] = None, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CLERK)
     result = await db.execute(select(Purchase).where(Purchase.id == purchase_id))
     purchase = result.scalars().first()
     if not purchase:
@@ -131,6 +134,7 @@ async def get_purchase(purchase_id: str, business_id: Annotated[str | None, Quer
 @router.patch("/{purchase_id}", response_model=PurchaseResponse)
 async def update_purchase(purchase_id: str, payload: PurchaseUpdate, business_id: Annotated[str | None, Query()] = None, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CLERK)
     result = await db.execute(select(Purchase).where(Purchase.id == purchase_id))
     purchase = result.scalars().first()
     if not purchase:
@@ -179,6 +183,7 @@ async def update_purchase(purchase_id: str, payload: PurchaseUpdate, business_id
 @router.post("/{purchase_id}/receive", response_model=PurchaseResponse)
 async def receive_purchase(purchase_id: str, business_id: Annotated[str | None, Query()] = None, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CLERK)
     try:
         purchase = await PurchasingService.receive_purchase(db, bid, purchase_id, current_user["id"])
         await db.commit()
@@ -219,6 +224,7 @@ async def receive_purchase(purchase_id: str, business_id: Annotated[str | None, 
 @router.post("/{purchase_id}/cancel", response_model=PurchaseResponse)
 async def cancel_purchase(purchase_id: str, business_id: Annotated[str | None, Query()] = None, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CLERK)
     try:
         purchase = await PurchasingService.cancel_purchase(db, bid, purchase_id)
         await db.commit()
@@ -256,6 +262,7 @@ async def cancel_purchase(purchase_id: str, business_id: Annotated[str | None, Q
 @router.delete("/{purchase_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_purchase(purchase_id: str, business_id: Annotated[str | None, Query()] = None, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CLERK)
     result = await db.execute(select(Purchase).where(Purchase.id == purchase_id))
     purchase = result.scalars().first()
     if not purchase:

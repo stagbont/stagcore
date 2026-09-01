@@ -106,3 +106,6 @@ ehthumbs.db
 *.swo
 *~
 *.sublime-*
+
+# 7. Personal presentation (live pitch guide) — static HTML, tailwind, js
+presentation/

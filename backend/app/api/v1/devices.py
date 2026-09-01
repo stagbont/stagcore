@@ -7,7 +7,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import OWNER_MANAGER_CLERK, get_current_user, require_business_roles
 from app.models.device import Device
 from app.schemas.device import DeviceCreate, DeviceResponse, DeviceUpdate
 
@@ -69,6 +69,7 @@ async def create_device(
     db: AsyncSession = Depends(get_db),
 ):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CLERK)
     await _validate_refs(db, bid, payload.category_id, payload.supplier_id)
     existing = await db.execute(select(Device).where(Device.business_id == bid, Device.serial_number == payload.serial_number))
     if existing.scalars().first():
@@ -122,6 +123,7 @@ async def update_device(device_id: str, payload: DeviceUpdate, current_user: dic
     allowed = {m["business_id"] for m in current_user.get("memberships", [])}
     if dev.business_id not in allowed:
         raise HTTPException(status_code=403, detail="Not a member of this business")
+    require_business_roles(dev.business_id, current_user, OWNER_MANAGER_CLERK)
     await _validate_refs(db, dev.business_id, payload.category_id, payload.supplier_id)
     if payload.serial_number is not None and payload.serial_number != dev.serial_number:
         existing = await db.execute(select(Device).where(Device.business_id == dev.business_id, Device.serial_number == payload.serial_number, Device.id != dev.id))
@@ -182,5 +184,6 @@ async def delete_device(device_id: str, current_user: dict = Depends(get_current
     allowed = {m["business_id"] for m in current_user.get("memberships", [])}
     if dev.business_id not in allowed:
         raise HTTPException(status_code=403, detail="Not a member of this business")
+    require_business_roles(dev.business_id, current_user, OWNER_MANAGER_CLERK)
     await db.delete(dev)
     await db.commit()

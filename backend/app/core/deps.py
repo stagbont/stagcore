@@ -107,3 +107,40 @@ def require_platform_admin(current_user: dict = Depends(get_current_user)):
     if email not in settings.platform_admin_emails_list:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Platform admin only")
     return current_user
+
+
+def get_user_role(current_user: dict, business_id: str) -> str | None:
+    for m in current_user.get("memberships", []):
+        if m.get("business_id") == business_id:
+            return m.get("role")
+    return None
+
+
+def require_business_owner(business_id: str, current_user: dict):
+    role = get_user_role(current_user, business_id)
+    if not role:
+        raise HTTPException(status_code=403, detail="Not a member of this business")
+    if role != "OWNER":
+        raise HTTPException(status_code=403, detail="Owner only")
+    return current_user
+
+
+def require_business_roles(business_id: str, current_user: dict, allowed_roles: set[str]):
+    role = get_user_role(current_user, business_id)
+    if not role:
+        raise HTTPException(status_code=403, detail="Not a member of this business")
+    if role not in allowed_roles:
+        raise HTTPException(status_code=403, detail=f"Role {role} not allowed")
+    return role
+
+
+# Role constants for convenience
+ROLE_OWNER = "OWNER"
+ROLE_MANAGER = "MANAGER"
+ROLE_CASHIER = "CASHIER"
+ROLE_CLERK = "INVENTORY_CLERK"
+
+ALL_ROLES = {ROLE_OWNER, ROLE_MANAGER, ROLE_CASHIER, ROLE_CLERK}
+OWNER_MANAGER = {ROLE_OWNER, ROLE_MANAGER}
+OWNER_MANAGER_CLERK = {ROLE_OWNER, ROLE_MANAGER, ROLE_CLERK}
+OWNER_MANAGER_CASHIER = {ROLE_OWNER, ROLE_MANAGER, ROLE_CASHIER}

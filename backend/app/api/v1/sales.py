@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import OWNER_MANAGER_CASHIER, get_current_user, require_business_roles
 from app.models.sale import Sale, SaleItem
 from app.schemas.sale import SaleCreate, SaleResponse, SaleUpdate
 from app.services.sales import SalesService
@@ -35,6 +35,7 @@ async def list_sales(
     db: AsyncSession = Depends(get_db),
 ):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CASHIER)
     query = select(Sale).where(Sale.business_id == bid).order_by(Sale.sale_date.desc())
     if status_filter:
         query = query.where(Sale.status == status_filter)
@@ -71,6 +72,7 @@ async def list_sales(
 @router.post("", response_model=SaleResponse, status_code=status.HTTP_201_CREATED)
 async def create_sale(payload: SaleCreate, business_id: Annotated[str | None, Query()] = None, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CASHIER)
     try:
         sale = await SalesService.create_sale(db, bid, payload, current_user["id"])
         await db.commit()
@@ -104,6 +106,7 @@ async def create_sale(payload: SaleCreate, business_id: Annotated[str | None, Qu
 @router.get("/{sale_id}", response_model=SaleResponse)
 async def get_sale(sale_id: str, business_id: Annotated[str | None, Query()] = None, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CASHIER)
     result = await db.execute(select(Sale).where(Sale.id == sale_id))
     sale = result.scalars().first()
     if not sale:
@@ -132,6 +135,7 @@ async def get_sale(sale_id: str, business_id: Annotated[str | None, Query()] = N
 @router.patch("/{sale_id}", response_model=SaleResponse)
 async def update_sale(sale_id: str, payload: SaleUpdate, business_id: Annotated[str | None, Query()] = None, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CASHIER)
     result = await db.execute(select(Sale).where(Sale.id == sale_id))
     sale = result.scalars().first()
     if not sale:
@@ -175,6 +179,7 @@ async def update_sale(sale_id: str, payload: SaleUpdate, business_id: Annotated[
 @router.post("/{sale_id}/complete", response_model=SaleResponse)
 async def complete_sale(sale_id: str, business_id: Annotated[str | None, Query()] = None, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CASHIER)
     try:
         sale = await SalesService.complete_sale(db, bid, sale_id, current_user["id"])
         await db.commit()
@@ -216,6 +221,7 @@ async def complete_sale(sale_id: str, business_id: Annotated[str | None, Query()
 @router.post("/{sale_id}/cancel", response_model=SaleResponse)
 async def cancel_sale(sale_id: str, business_id: Annotated[str | None, Query()] = None, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CASHIER)
     try:
         sale = await SalesService.cancel_sale(db, bid, sale_id, current_user["id"])
         await db.commit()
@@ -255,6 +261,7 @@ async def cancel_sale(sale_id: str, business_id: Annotated[str | None, Query()] 
 @router.delete("/{sale_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_sale(sale_id: str, business_id: Annotated[str | None, Query()] = None, current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CASHIER)
     result = await db.execute(select(Sale).where(Sale.id == sale_id))
     sale = result.scalars().first()
     if not sale:

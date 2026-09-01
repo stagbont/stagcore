@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import OWNER_MANAGER_CLERK, get_current_user, require_business_roles
 from app.models.category import Category
 from app.schemas.category import CategoryCreate, CategoryResponse, CategoryUpdate
 
@@ -45,6 +45,7 @@ async def create_category(
     db: AsyncSession = Depends(get_db),
 ):
     bid = _get_business_id(current_user, business_id)
+    require_business_roles(bid, current_user, OWNER_MANAGER_CLERK)
     slug = payload.slug or Category.slugify(payload.name)
     # Check unique
     existing = await db.execute(select(Category).where(Category.business_id == bid, Category.slug == slug))
@@ -90,6 +91,7 @@ async def update_category(category_id: str, payload: CategoryUpdate, current_use
     allowed = {m["business_id"] for m in current_user.get("memberships", [])}
     if cat.business_id not in allowed:
         raise HTTPException(status_code=403, detail="Not a member of this business")
+    require_business_roles(cat.business_id, current_user, OWNER_MANAGER_CLERK)
     if payload.name is not None:
         # Check duplicate name
         dup = await db.execute(select(Category).where(Category.business_id == cat.business_id, Category.name == payload.name, Category.id != cat.id))
@@ -121,6 +123,7 @@ async def delete_category(category_id: str, current_user: dict = Depends(get_cur
     allowed = {m["business_id"] for m in current_user.get("memberships", [])}
     if cat.business_id not in allowed:
         raise HTTPException(status_code=403, detail="Not a member of this business")
+    require_business_roles(cat.business_id, current_user, OWNER_MANAGER_CLERK)
     # Check if any products/devices reference it
     from app.models.product import Product
     from app.models.device import Device

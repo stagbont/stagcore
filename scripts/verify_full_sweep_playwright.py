@@ -157,7 +157,7 @@ async def sweep():
         # EmptyState vs populated: dashboard should have low-stock table or empty state
         dash_body = await page.inner_text("body")
         assert "Stock Reorder & Alert List" in dash_body or "Low Stock" in dash_body
-        assert "tabular-nums" in await page.content() or "$" in dash_body
+        assert "tabular-nums" in await page.content() or "GH₵" in dash_body or "$" in dash_body
         print("✓ dashboard KPI + low-stock rendered")
         # Activity feed time datetime (best-effort)
         if await page.locator("time[datetime]").count() > 0:

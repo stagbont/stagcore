@@ -18,6 +18,7 @@ const badgeVariants = cva(
           "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
+        info: "bg-sky-tint text-notion-blue hover:bg-[color-mix(in_oklch,var(--color-sky-tint),var(--color-notion-blue)_15%)] dark:bg-sky-tint/15 dark:text-sky-wash",
         link: "text-primary underline-offset-4 hover:underline",
         success:
           "bg-[var(--status-success)]/10 text-[var(--status-success)] border-[var(--status-success)]/20 [a]:hover:bg-[var(--status-success)]/20",

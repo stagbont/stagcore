@@ -61,7 +61,7 @@ export default function RegisterPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md border-border shadow-[var(--shadow-low)]">
+      <Card className="w-full max-w-md border-border">
         <CardHeader>
           <div className="flex items-center gap-2 mb-1">
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold">S</div>

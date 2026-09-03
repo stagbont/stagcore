@@ -19,7 +19,7 @@ import { EmptyState } from "@/components/empty-state";
 import { Field } from "@/components/field";
 import { HelpButton } from "@/components/help/help-button";
 import { API_URL } from "@/lib/fetch-with-auth";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 
 type SaleItem = { id: string; product_id: string | null; device_id: string | null; quantity: number; selling_price: string; discount: string; warranty_months_override: number | null };
 type Sale = { id: string; status: string; payment_method: string; sale_date: string; total_amount: string; customer_id: string | null; location_id: string | null; notes: string | null; items: SaleItem[] };
@@ -27,6 +27,8 @@ type Product = { id: string; name: string; sku: string | null; selling_price: st
 type Device = { id: string; product_name: string; serial_number: string; imei: string | null; selling_price: string; status: string };
 type Customer = { id: string; name: string; phone: string | null };
 type Location = { id: string; name: string };
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = { cash: "Cash", card: "Card", mobile_money: "Mobile Money" };
 
 type DraftState = { mode: "product" | "device"; product_id: string; device_id: string; quantity: string; selling_price: string; discount: string; warranty_override: string };
 
@@ -341,7 +343,7 @@ export default function SalesPage() {
       <PageHeader>
         <PageHeaderContent>
           <PageHeaderTitle>Sales</PageHeaderTitle>
-          <PageHeaderDescription>POS — draft → complete (atomic stock / device sale) · Tablet 44×44</PageHeaderDescription>
+          <PageHeaderDescription>Point of sale — draft a sale, complete it, or handle returns</PageHeaderDescription>
         </PageHeaderContent>
         <PageHeaderActions data-tour="new-sale-btn">
           <HelpButton slug="sales-pos" />
@@ -508,9 +510,9 @@ export default function SalesPage() {
                 <TableBody>
                   {sales.map((s) => (
                     <TableRow key={s.id}>
-                      <TableCell className="text-xs tabular-nums">{new Date(s.sale_date).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-xs tabular-nums">{formatDate(s.sale_date)}</TableCell>
                       <TableCell><Badge variant={s.status === "completed" ? "default" : s.status === "cancelled" ? "destructive" : "secondary"} className="rounded-full">{s.status}</Badge></TableCell>
-                      <TableCell><Badge variant="outline" className="rounded-full">{s.payment_method}</Badge></TableCell>
+                      <TableCell><Badge variant="outline" className="rounded-full">{PAYMENT_METHOD_LABELS[s.payment_method] ?? s.payment_method}</Badge></TableCell>
                       <TableCell className="text-xs">{s.items.length} item{s.items.length !== 1 ? "s" : ""} {s.items.some((i) => i.device_id) ? "(+devices)" : ""}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatCurrency(s.total_amount)}</TableCell>
                       <TableCell className="text-right">

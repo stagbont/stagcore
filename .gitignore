@@ -109,3 +109,6 @@ ehthumbs.db
 
 # 7. Personal presentation (live pitch guide) — static HTML, tailwind, js
 presentation/
+
+# Browser audit artifacts (playwright-cli snapshots)
+.playwright-cli/

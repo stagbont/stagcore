@@ -24,12 +24,12 @@
   --color-border: var(--border-hairline);
   --color-input: var(--border-hairline);
   --color-ring: var(--action-primary);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-notioninter);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --radius-sm: 6px;
   --radius-md: 6px;
   --radius-lg: 12px;
-  --font-heading: var(--font-geist-sans);
+  --font-heading: var(--font-notioninter);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -52,60 +52,142 @@
   --shadow-modal: 0 8px 30px rgb(0 0 0 / 0.12), 0 4px 12px rgb(0 0 0 / 0.08);
 }
 
+/*
+ * Notion style reference (DESIGNnotion.md) — static tokens.
+ * NOTE: Notion's `--spacing-*` names are intentionally NOT mapped here.
+ * In Tailwind v4 `--spacing-*` drives the dynamic spacing scale
+ * (e.g. `--spacing-4` = 1rem), so redefining `--spacing-4: 4px` would
+ * silently break every `p-4`/`gap-4` utility. Layout rhythm uses
+ * `--page-max-width` / `--section-gap` / `--card-padding` below instead.
+ */
+@theme {
+  /* Notion palette — utilities like bg-marigold, text-notion-blue, bg-sky-tint */
+  --color-notion-blue: #0075de;
+  --color-paper-warmth: #f6f5f4;
+  --color-pure-white: #ffffff;
+  --color-ink-black: #000000;
+  --color-charcoal: #111111;
+  --color-stone: #757575;
+  --color-graphite: #615d59;
+  --color-slate: #696969;
+  --color-sky-tint: #e6f3fe;
+  --color-marigold: #ffb110;
+  --color-coral: #f64932;
+  --color-saffron: #e89d01;
+  --color-vermillion: #e32d14;
+  --color-mocha: #b18164;
+  --color-signal-blue: #097fe8;
+  --color-sky-wash: #62aef0;
+  --color-midnight-ink: #02093a;
+
+  /* Notion typefaces — next/font provides --font-notioninter on <html>;
+     --font-lyon-text gives the `font-lyon-text` utility for editorial moments */
+  --font-notioninter: "NotionInter", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-lyon-text: "Lyon Text", "Source Serif 4", Georgia, "Times New Roman", serif;
+
+  /* Notion type scale */
+  --text-caption: 12px;
+  --leading-caption: 1.33;
+  --tracking-caption: 0.12px;
+  --text-body-sm: 14px;
+  --leading-body-sm: 1.43;
+  --text-body: 16px;
+  --leading-body: 1.5;
+  --text-subheading: 20px;
+  --leading-subheading: 1;
+  --text-heading-sm: 22px;
+  --leading-heading-sm: 1.27;
+  --tracking-heading-sm: -0.242px;
+  --text-heading: 40px;
+  --leading-heading: 1.5;
+  --text-heading-lg: 48px;
+  --leading-heading-lg: 1.5;
+  --text-display-sm: 54px;
+  --leading-display-sm: 1.04;
+  --tracking-display-sm: -1.89px;
+  --text-display: 72px;
+  --leading-display: 1.21;
+  --tracking-display: -2.016px;
+  --text-display-lg: 96px;
+  --leading-display-lg: 1.04;
+  --tracking-display-lg: -4.608px;
+
+  /* Notion radii — cards 12px, buttons 8px, pills full */
+  --radius-cards: 12px;
+  --radius-pills: 9999px;
+  --radius-small: 4px;
+  --radius-buttons: 8px;
+
+  /* Notion elevation — hairlines everywhere; shadow only on sticky nav + mockups */
+  --shadow-nav: 0px 0.7px 1.462px 0px rgb(0% 0% 0%/0.015), 0px 3px 9px 0px rgb(0% 0% 0%/0.03);
+  --shadow-mockup: 0px 4px 12px rgba(0, 0, 0, 0.1);
+
+  /* Notion motion — 200ms ease for hovers/transitions */
+  --transition-notion: 200ms ease;
+}
+
 :root {
-  --bg-canvas: #ffffff;
-  --bg-surface: #f7f7f8;
+  color-scheme: light;
+  --bg-canvas: #f6f5f4;
+  --bg-surface: #ffffff;
   --bg-surface-raised: #ffffff;
-  --border-hairline: #e3e3e3;
-  --text-primary: #1a1a1e;
-  --text-secondary: #6b6b74;
-  --action-primary: #2563eb;
-  --action-primary-hover: #1d4ed8;
+  --border-hairline: rgba(0, 0, 0, 0.08);
+  --text-primary: #111111;
+  --text-secondary: #615d59;
+  --action-primary: #0075de;
+  --action-primary-hover: #0060bf;
   --status-success: #1a7f4e;
   --status-warning: #b45309;
   --status-critical: #c0290d;
-  --background: #ffffff;
-  --foreground: #1a1a1e;
-  --card: #f7f7f8;
-  --card-foreground: #1a1a1e;
+  --background: #f6f5f4;
+  --foreground: #111111;
+  --card: #ffffff;
+  --card-foreground: #111111;
   --popover: #ffffff;
-  --popover-foreground: #1a1a1e;
-  --primary: #2563eb;
+  --popover-foreground: #111111;
+  --primary: #0075de;
   --primary-foreground: #ffffff;
-  --secondary: #f7f7f8;
-  --secondary-foreground: #1a1a1e;
-  --muted: #f7f7f8;
-  --muted-foreground: #6b6b74;
-  --accent: #f7f7f8;
-  --accent-foreground: #1a1a1e;
+  --secondary: #ffffff;
+  --secondary-foreground: #111111;
+  --muted: #ffffff;
+  --muted-foreground: #615d59;
+  --accent: #ffffff;
+  --accent-foreground: #111111;
   --destructive: #c0290d;
-  --border: #e3e3e3;
-  --input: #e3e3e3;
-  --ring: #2563eb;
+  --border: rgba(0, 0, 0, 0.08);
+  --input: rgba(0, 0, 0, 0.08);
+  --ring: #0075de;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --sidebar: #f7f7f8;
-  --sidebar-foreground: #1a1a1e;
-  --sidebar-primary: #2563eb;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #111111;
+  --sidebar-primary: #0075de;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #ffffff;
-  --sidebar-accent-foreground: #1a1a1e;
-  --sidebar-border: #e3e3e3;
-  --sidebar-ring: #2563eb;
+  --sidebar-accent: #f6f5f4;
+  --sidebar-accent-foreground: #111111;
+  --sidebar-border: rgba(0, 0, 0, 0.08);
+  --sidebar-ring: #0075de;
+
+  /* Layout rhythm */
+  --page-max-width: 1440px;
+  --section-gap: 80px;
+  --card-padding: 24px;
+  --element-gap: 8px;
 }
 
 .dark {
+  color-scheme: dark;
   --bg-canvas: #0c0d0f;
   --bg-surface: #141518;
   --bg-surface-raised: #1a1b1f;
   --border-hairline: #26272c;
   --text-primary: #f2f2f4;
   --text-secondary: #8a8a92;
-  --action-primary: #5b8dff;
-  --action-primary-hover: #7ba3ff;
+  --action-primary: #62aef0;
+  --action-primary-hover: #8cc6f4;
   --status-success: #3ecf8e;
   --status-warning: #f0a839;
   --status-critical: #f0553a;
@@ -115,8 +197,8 @@
   --card-foreground: #f2f2f4;
   --popover: #1a1b1f;
   --popover-foreground: #f2f2f4;
-  --primary: #5b8dff;
-  --primary-foreground: #ffffff;
+  --primary: #62aef0;
+  --primary-foreground: #0c0d0f;
   --secondary: #141518;
   --secondary-foreground: #f2f2f4;
   --muted: #141518;
@@ -126,7 +208,7 @@
   --destructive: #f0553a;
   --border: #26272c;
   --input: #26272c;
-  --ring: #5b8dff;
+  --ring: #62aef0;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -134,12 +216,12 @@
   --chart-5: oklch(0.269 0 0);
   --sidebar: #141518;
   --sidebar-foreground: #f2f2f4;
-  --sidebar-primary: #5b8dff;
-  --sidebar-primary-foreground: #ffffff;
+  --sidebar-primary: #62aef0;
+  --sidebar-primary-foreground: #0c0d0f;
   --sidebar-accent: #1a1b1f;
   --sidebar-accent-foreground: #f2f2f4;
   --sidebar-border: #26272c;
-  --sidebar-ring: #5b8dff;
+  --sidebar-ring: #62aef0;
 }
 
 * {
@@ -149,6 +231,16 @@
 body {
   background: var(--bg-canvas);
   color: var(--text-primary);
+}
+
+/* Notion: sky-tint text selection + 200ms ease on interactive elements */
+::selection {
+  background: var(--color-sky-tint);
+}
+
+button, a, [role="button"] {
+  transition-duration: 200ms;
+  transition-timing-function: ease;
 }
 
 /* Ensure tabular-nums on numeric data — scoped per DESIGN.md */

@@ -185,10 +185,10 @@ export default function DashboardPage() {
             <Button className="min-h-11 font-medium">+ New POS Sale</Button>
           </Link>
           <Link href="/purchases">
-            <Button variant="outline" className="min-h-11">Receive Inventory</Button>
+            <Button variant="ghost" className="min-h-11">Receive Inventory</Button>
           </Link>
           <Link href="/reports">
-            <Button variant="outline" className="min-h-11">Detailed Reports</Button>
+            <Button variant="ghost" className="min-h-11">Detailed Reports</Button>
           </Link>
         </PageHeaderActions>
       </PageHeader>
@@ -211,24 +211,24 @@ export default function DashboardPage() {
           </>
         ) : (
           <>
-            <Card className="border-border bg-surface">
+            <Card tone="marigold">
               <CardHeader className="pb-2">
-                <CardDescription className="text-xs uppercase tracking-wider font-medium">Today&apos;s Sales Revenue</CardDescription>
+                <CardDescription className="text-xs uppercase tracking-wider font-medium text-charcoal/70">Today&apos;s Sales Revenue</CardDescription>
                 <CardTitle className="text-2xl font-bold tabular-nums">{formatCurrency(summary?.today_sales_total)}</CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
-                <p className="text-xs text-muted-foreground">{summary ? `${summary.today_sales_count} completed orders today` : "—"}</p>
+                <p className="text-xs text-charcoal/70">{summary ? `${summary.today_sales_count} completed orders today` : "—"}</p>
               </CardContent>
             </Card>
 
             {isOwnerManager ? (
-              <Card className="border-border bg-surface">
+              <Card tone="sky">
                 <CardHeader className="pb-2">
-                  <CardDescription className="text-xs uppercase tracking-wider font-medium">Today&apos;s Gross Profit</CardDescription>
+                  <CardDescription className="text-xs uppercase tracking-wider font-medium text-charcoal/70">Today&apos;s Gross Profit</CardDescription>
                   <CardTitle className="text-2xl font-bold tabular-nums">{formatCurrency(summary?.today_gross_profit)}</CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <p className="text-xs text-muted-foreground">Derived post COGS deduction</p>
+                  <p className="text-xs text-charcoal/70">Derived post COGS deduction</p>
                 </CardContent>
               </Card>
             ) : (
@@ -265,14 +265,14 @@ export default function DashboardPage() {
               </Card>
             )}
 
-            <Card className="border-border bg-surface">
+            <Card tone={(summary?.low_stock_count ?? 0) + (summary?.out_of_stock_count ?? 0) > 0 ? "coral" : undefined}>
               <CardHeader className="pb-2">
                 <CardDescription className="text-xs uppercase tracking-wider font-medium">Low Stock Attention</CardDescription>
                 <CardTitle className="text-2xl font-bold tabular-nums">{(summary?.low_stock_count ?? 0) + (summary?.out_of_stock_count ?? 0)}</CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
                 {summary && summary.low_stock_count + summary.out_of_stock_count > 0 ? (
-                  <Badge variant="critical" className="text-xs font-normal">
+                  <Badge variant="outline" className="border-charcoal/25 text-xs font-normal">
                     {summary.out_of_stock_count} Out of stock · {summary.low_stock_count} Low
                   </Badge>
                 ) : (

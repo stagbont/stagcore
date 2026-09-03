@@ -2,17 +2,36 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+/*
+ * Notion accent tones — solid color fills replace the hairline border.
+ * Scoped to dashboard summary/feature blocks (accent-scope decision);
+ * data tables, forms, and POS chrome stay on the default white card.
+ * All tones except midnight use charcoal text for contrast on the hue.
+ */
+type CardTone = "default" | "marigold" | "coral" | "sky" | "midnight" | "tint";
+
+const cardToneClasses: Record<Exclude<CardTone, "default">, string> = {
+  marigold: "border-transparent bg-marigold text-charcoal",
+  coral: "border-transparent bg-coral text-charcoal",
+  sky: "border-transparent bg-sky-wash text-charcoal",
+  midnight: "border-transparent bg-midnight-ink text-white",
+  tint: "border-transparent bg-sky-tint text-charcoal",
+};
+
 function Card({
   className,
   size = "default",
+  tone = "default",
   ...props
-}: React.ComponentProps<"div"> & { size?: "default" | "sm" }) {
+}: React.ComponentProps<"div"> & { size?: "default" | "sm"; tone?: CardTone }) {
   return (
     <div
       data-slot="card"
       data-size={size}
+      data-tone={tone}
       className={cn(
         "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl border border-border bg-card py-(--card-spacing) text-sm text-card-foreground [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        tone !== "default" && cardToneClasses[tone],
         className
       )}
       {...props}

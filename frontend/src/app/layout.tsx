@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const notionInter = Inter({
+  variable: "--font-notioninter",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const lyonText = Source_Serif_4({
+  variable: "--font-lyon-text",
   subsets: ["latin"],
+  weight: ["400"],
 });
 
 export const metadata: Metadata = {
@@ -21,8 +23,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
+      className={`${notionInter.variable} ${lyonText.variable} h-full antialiased`}
     >
+      <script
+        dangerouslySetInnerHTML={{
+          __html:
+            "(function(){try{var t=localStorage.getItem('stagcore-theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})();",
+        }}
+      />
       <body className="min-h-full flex flex-col bg-background text-foreground">{children}</body>
     </html>
   );

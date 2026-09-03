@@ -7,7 +7,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, ScanLine, X } from "lucide-react";
+import { Search, ScanLine, X, Sun, Moon } from "lucide-react";
 import { BusinessProvider, useBusiness } from "@/components/providers/business-provider";
 import { ChatWidget } from "@/components/chat/chat-widget";
 import { API_URL } from "@/lib/fetch-with-auth";
@@ -26,6 +26,16 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const { state: bizState } = useBusiness();
   const [search, setSearch] = useState("");
   const [searching, setSearching] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      const stored = localStorage.getItem("stagcore-theme");
+      if (stored) return stored === "dark";
+    } catch {
+      /* fall through to DOM state */
+    }
+    return document.documentElement.classList.contains("dark");
+  });
   const businessName = bizState.business?.name || bizState.business?.slug || "";
 
   useEffect(() => {
@@ -98,7 +108,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b border-border bg-surface/80 px-4 backdrop-blur supports-[backdrop-filter]:bg-surface/60 sm:px-6">
+        <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b border-border bg-surface/80 px-4 shadow-nav backdrop-blur supports-[backdrop-filter]:bg-surface/60 sm:px-6">
           <SidebarTrigger className="shrink-0" />
           <div className="hidden sm:flex flex-1 items-center gap-2 text-sm">
             <span className="font-medium truncate">{businessName || "Workspace"}</span>
@@ -137,6 +147,27 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               <span className="hidden sm:inline">{searching ? "Searching…" : "Search"}</span>
             </Button>
           </form>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              const next = !darkMode;
+              setDarkMode(next);
+              document.documentElement.classList.toggle("dark", next);
+              try {
+                localStorage.setItem("stagcore-theme", next ? "dark" : "light");
+              } catch {
+                /* storage unavailable — theme applies to this page only */
+              }
+            }}
+            aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+            aria-pressed={darkMode}
+            suppressHydrationWarning
+            className="shrink-0 min-h-11 min-w-11"
+          >
+            {darkMode ? <Sun aria-hidden="true" className="size-4" /> : <Moon aria-hidden="true" className="size-4" />}
+          </Button>
         </header>
         <main className="flex-1 p-4 sm:p-6">{children}</main>
       </SidebarInset>

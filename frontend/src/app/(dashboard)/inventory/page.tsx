@@ -127,7 +127,7 @@ export default function InventoryPage() {
       <PageHeader>
         <PageHeaderContent>
           <PageHeaderTitle>Inventory</PageHeaderTitle>
-          <PageHeaderDescription>Stock is derived from movements — never edited directly</PageHeaderDescription>
+          <PageHeaderDescription>Stock updates automatically from sales, purchases and adjustments</PageHeaderDescription>
         </PageHeaderContent>
         <PageHeaderActions>
           <HelpButton slug="inventory-ledger" />
@@ -149,7 +149,7 @@ export default function InventoryPage() {
         <Card data-tour="stock-levels" className="border-hairline lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-base">Stock Levels</CardTitle>
-            <CardDescription>Current stock = sum of movements per product</CardDescription>
+            <CardDescription>Live levels across all locations</CardDescription>
           </CardHeader>
           <CardContent>
             {products.length ? (
@@ -199,7 +199,7 @@ export default function InventoryPage() {
         <Card data-tour="adjust-stock" className="border-hairline">
           <CardHeader>
             <CardTitle className="text-base">Adjust Stock</CardTitle>
-            <CardDescription>All changes create a ledger row</CardDescription>
+            <CardDescription>Every change is tracked in the ledger</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleAction} className="flex flex-col gap-4" noValidate>
